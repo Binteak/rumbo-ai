@@ -1,0 +1,49 @@
+# Entorno completo como en producción: PostgreSQL + Redis + 2 réplicas del backend + frontend.
+# Arranca con:  docker compose up --build   →  http://localhost:8080
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: rumbo
+      POSTGRES_PASSWORD: rumbo
+      POSTGRES_DB: rumbo
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "rumbo", "-d", "rumbo"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    image: rumbo-backend:1.0.0
+    deploy:
+      replicas: 2   # dos réplicas sin estado detrás del mismo nombre de servicio
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://rumbo:rumbo@postgres:5432/rumbo
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: http://localhost:8080
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  frontend:
+    build: ./frontend
+    image: rumbo-frontend:1.0.0
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

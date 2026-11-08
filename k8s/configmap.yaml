@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rumbo-config
+data:
+  AGENT_MODE: "auto"
+  AGENT_MODEL: "claude-sonnet-5-5"
+  AGENT_EFFORT: "medium"
+  DEMO_DELAY_MS: "600"
+  REDIS_URL: "redis://redis:6379/0"
+  CORS_ORIGINS: "http://rumbo.localhost"

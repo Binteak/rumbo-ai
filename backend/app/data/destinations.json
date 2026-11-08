@@ -1,0 +1,1078 @@
+[
+ {
+  "id": "lisboa",
+  "name": "Lisboa",
+  "country": "Portugal",
+  "flag": "🇵🇹",
+  "description": "Colinas, tranvías y miradores sobre el Tajo con una escena gastronómica en plena forma.",
+  "tags": [
+   "gastronomia",
+   "historia",
+   "arte",
+   "nocturna",
+   "playa"
+  ],
+  "climate": {
+   "avg_temp_c": [
+    15,
+    16,
+    18,
+    19,
+    21,
+    24,
+    27,
+    27,
+    25,
+    21,
+    18,
+    15
+   ],
+   "rain_days": [
+    10,
+    9,
+    8,
+    8,
+    6,
+    2,
+    1,
+    1,
+    4,
+    8,
+    9,
+    10
+   ]
+  },
+  "daily_cost_eur": {
+   "mochilero": 55,
+   "confort": 120,
+   "lujo": 290
+  },
+  "pois": [
+   {
+    "name": "Tranvía 28 y Alfama",
+    "category": "historia",
+    "duration_h": 3,
+    "price_eur": 3,
+    "area": "Alfama"
+   },
+   {
+    "name": "Pasteis de Belém y Monasterio de los Jerónimos",
+    "category": "historia",
+    "duration_h": 3,
+    "price_eur": 12,
+    "area": "Belém"
+   },
+   {
+    "name": "MAAT y LX Factory",
+    "category": "arte",
+    "duration_h": 3,
+    "price_eur": 11,
+    "area": "Alcântara"
+   },
+   {
+    "name": "Time Out Market",
+    "category": "gastronomia",
+    "duration_h": 2,
+    "price_eur": 25,
+    "area": "Cais do Sodré"
+   },
+   {
+    "name": "Fado en una casa tradicional",
+    "category": "nocturna",
+    "duration_h": 3,
+    "price_eur": 40,
+    "area": "Mouraria"
+   },
+   {
+    "name": "Playas de Cascais",
+    "category": "playa",
+    "duration_h": 5,
+    "price_eur": 6,
+    "area": "Cascais"
+   },
+   {
+    "name": "Sintra y el Palacio da Pena",
+    "category": "historia",
+    "duration_h": 6,
+    "price_eur": 20,
+    "area": "Sintra"
+   },
+   {
+    "name": "Barrio Alto de tapeo",
+    "category": "nocturna",
+    "duration_h": 3,
+    "price_eur": 30,
+    "area": "Bairro Alto"
+   },
+   {
+    "name": "Museo Gulbenkian",
+    "category": "arte",
+    "duration_h": 2,
+    "price_eur": 10,
+    "area": "Avenidas Novas"
+   },
+   {
+    "name": "Ruta de petiscos por Príncipe Real",
+    "category": "gastronomia",
+    "duration_h": 3,
+    "price_eur": 35,
+    "area": "Príncipe Real"
+   }
+  ]
+ },
+ {
+  "id": "kioto",
+  "name": "Kioto",
+  "country": "Japón",
+  "flag": "🇯🇵",
+  "description": "Templos, jardines zen y cocina kaiseki en la antigua capital imperial.",
+  "tags": [
+   "historia",
+   "gastronomia",
+   "naturaleza",
+   "arte"
+  ],
+  "climate": {
+   "avg_temp_c": [
+    5,
+    6,
+    9,
+    15,
+    20,
+    24,
+    28,
+    29,
+    25,
+    19,
+    13,
+    8
+   ],
+   "rain_days": [
+    6,
+    8,
+    10,
+    10,
+    10,
+    13,
+    12,
+    9,
+    11,
+    8,
+    7,
+    6
+   ]
+  },
+  "daily_cost_eur": {
+   "mochilero": 70,
+   "confort": 160,
+   "lujo": 420
+  },
+  "pois": [
+   {
+    "name": "Fushimi Inari al amanecer",
+    "category": "historia",
+    "duration_h": 3,
+    "price_eur": 0,
+    "area": "Fushimi"
+   },
+   {
+    "name": "Bosque de bambú de Arashiyama",
+    "category": "naturaleza",
+    "duration_h": 3,
+    "price_eur": 0,
+    "area": "Arashiyama"
+   },
+   {
+    "name": "Kinkaku-ji, el Pabellón Dorado",
+    "category": "historia",
+    "duration_h": 2,
+    "price_eur": 4,
+    "area": "Kita"
+   },
+   {
+    "name": "Mercado de Nishiki",
+    "category": "gastronomia",
+    "duration_h": 2,
+    "price_eur": 25,
+    "area": "Nakagyō"
+   },
+   {
+    "name": "Ceremonia del té en Gion",
+    "category": "arte",
+    "duration_h": 2,
+    "price_eur": 35,
+    "area": "Gion"
+   },
+   {
+    "name": "Paseo del Filósofo",
+    "category": "naturaleza",
+    "duration_h": 2,
+    "price_eur": 0,
+    "area": "Higashiyama"
+   },
+   {
+    "name": "Cena kaiseki",
+    "category": "gastronomia",
+    "duration_h": 3,
+    "price_eur": 90,
+    "area": "Pontocho"
+   },
+   {
+    "name": "Kiyomizu-dera al atardecer",
+    "category": "historia",
+    "duration_h": 2,
+    "price_eur": 3,
+    "area": "Higashiyama"
+   },
+   {
+    "name": "Taller de cerámica Kiyomizu-yaki",
+    "category": "arte",
+    "duration_h": 3,
+    "price_eur": 40,
+    "area": "Gojōzaka"
+   }
+  ]
+ },
+ {
+  "id": "reikiavik",
+  "name": "Reikiavik",
+  "country": "Islandia",
+  "flag": "🇮🇸",
+  "description": "Puerta de entrada a glaciares, géiseres y auroras boreales.",
+  "tags": [
+   "naturaleza",
+   "aventura",
+   "fotografia"
+  ],
+  "climate": {
+   "avg_temp_c": [
+    0,
+    0,
+    1,
+    3,
+    7,
+    10,
+    12,
+    11,
+    8,
+    5,
+    2,
+    0
+   ],
+   "rain_days": [
+    13,
+    12,
+    14,
+    12,
+    10,
+    10,
+    10,
+    11,
+    13,
+    14,
+    12,
+    14
+   ]
+  },
+  "daily_cost_eur": {
+   "mochilero": 110,
+   "confort": 230,
+   "lujo": 520
+  },
+  "pois": [
+   {
+    "name": "Círculo Dorado: Þingvellir, Geysir y Gullfoss",
+    "category": "naturaleza",
+    "duration_h": 9,
+    "price_eur": 80,
+    "area": "Sur"
+   },
+   {
+    "name": "Laguna Azul",
+    "category": "naturaleza",
+    "duration_h": 3,
+    "price_eur": 75,
+    "area": "Grindavík"
+   },
+   {
+    "name": "Caza de auroras boreales",
+    "category": "fotografia",
+    "duration_h": 4,
+    "price_eur": 70,
+    "area": "Afueras"
+   },
+   {
+    "name": "Hallgrímskirkja y centro",
+    "category": "historia",
+    "duration_h": 2,
+    "price_eur": 10,
+    "area": "Centro"
+   },
+   {
+    "name": "Kayak entre icebergs en Jökulsárlón",
+    "category": "aventura",
+    "duration_h": 10,
+    "price_eur": 150,
+    "area": "Costa sur"
+   },
+   {
+    "name": "Avistamiento de ballenas",
+    "category": "naturaleza",
+    "duration_h": 3,
+    "price_eur": 90,
+    "area": "Puerto viejo"
+   },
+   {
+    "name": "Cascadas de Seljalandsfoss y Skógafoss",
+    "category": "fotografia",
+    "duration_h": 8,
+    "price_eur": 60,
+    "area": "Costa sur"
+   },
+   {
+    "name": "Harpa y cena nórdica",
+    "category": "gastronomia",
+    "duration_h": 3,
+    "price_eur": 70,
+    "area": "Puerto"
+   }
+  ]
+ },
+ {
+  "id": "cdmx",
+  "name": "Ciudad de México",
+  "country": "México",
+  "flag": "🇲🇽",
+  "description": "Megaciudad vibrante: murales, mercados, mezcalerías y arquitectura moderna.",
+  "tags": [
+   "gastronomia",
+   "arte",
+   "historia",
+   "nocturna"
+  ],
+  "climate": {
+   "avg_temp_c": [
+    14,
+    16,
+    18,
+    19,
+    20,
+    19,
+    18,
+    18,
+    18,
+    17,
+    16,
+    14
+   ],
+   "rain_days": [
+    2,
+    2,
+    4,
+    6,
+    11,
+    18,
+    22,
+    21,
+    18,
+    9,
+    4,
+    2
+   ]
+  },
+  "daily_cost_eur": {
+   "mochilero": 45,
+   "confort": 100,
+   "lujo": 260
+  },
+  "pois": [
+   {
+    "name": "Museo Nacional de Antropología",
+    "category": "historia",
+    "duration_h": 3,
+    "price_eur": 6,
+    "area": "Chapultepec"
+   },
+   {
+    "name": "Casa Azul de Frida Kahlo",
+    "category": "arte",
+    "duration_h": 2,
+    "price_eur": 13,
+    "area": "Coyoacán"
+   },
+   {
+    "name": "Ruta de tacos en la Roma",
+    "category": "gastronomia",
+    "duration_h": 3,
+    "price_eur": 20,
+    "area": "Roma Norte"
+   },
+   {
+    "name": "Teotihuacán en globo",
+    "category": "aventura",
+    "duration_h": 6,
+    "price_eur": 180,
+    "area": "Teotihuacán"
+   },
+   {
+    "name": "Trajineras de Xochimilco",
+    "category": "nocturna",
+    "duration_h": 3,
+    "price_eur": 25,
+    "area": "Xochimilco"
+   },
+   {
+    "name": "Mezcalería y coctelería en Condesa",
+    "category": "nocturna",
+    "duration_h": 3,
+    "price_eur": 35,
+    "area": "Condesa"
+   },
+   {
+    "name": "Murales de Diego Rivera en Palacio Nacional",
+    "category": "arte",
+    "duration_h": 2,
+    "price_eur": 0,
+    "area": "Centro"
+   },
+   {
+    "name": "Mercado de San Juan",
+    "category": "gastronomia",
+    "duration_h": 2,
+    "price_eur": 15,
+    "area": "Centro"
+   }
+  ]
+ },
+ {
+  "id": "marrakech",
+  "name": "Marrakech",
+  "country": "Marruecos",
+  "flag": "🇲🇦",
+  "description": "Zocos, riads y el Atlas a un paso: color, especias y desierto.",
+  "tags": [
+   "historia",
+   "gastronomia",
+   "aventura",
+   "fotografia"
+  ],
+  "climate": {
+   "avg_temp_c": [
+    12,
+    14,
+    17,
+    19,
+    23,
+    27,
+    31,
+    31,
+    27,
+    22,
+    17,
+    13
+   ],
+   "rain_days": [
+    5,
+    5,
+    6,
+    5,
+    3,
+    1,
+    0,
+    1,
+    2,
+    4,
+    5,
+    5
+   ]
+  },
+  "daily_cost_eur": {
+   "mochilero": 40,
+   "confort": 95,
+   "lujo": 300
+  },
+  "pois": [
+   {
+    "name": "Plaza Jemaa el-Fna al anochecer",
+    "category": "nocturna",
+    "duration_h": 3,
+    "price_eur": 10,
+    "area": "Medina"
+   },
+   {
+    "name": "Jardín Majorelle y Museo YSL",
+    "category": "arte",
+    "duration_h": 2,
+    "price_eur": 15,
+    "area": "Gueliz"
+   },
+   {
+    "name": "Zocos de la medina",
+    "category": "fotografia",
+    "duration_h": 3,
+    "price_eur": 0,
+    "area": "Medina"
+   },
+   {
+    "name": "Palacio de la Bahía",
+    "category": "historia",
+    "duration_h": 2,
+    "price_eur": 7,
+    "area": "Kasbah"
+   },
+   {
+    "name": "Clase de cocina marroquí",
+    "category": "gastronomia",
+    "duration_h": 4,
+    "price_eur": 45,
+    "area": "Medina"
+   },
+   {
+    "name": "Excursión al Atlas y valle de Ourika",
+    "category": "aventura",
+    "duration_h": 8,
+    "price_eur": 40,
+    "area": "Atlas"
+   },
+   {
+    "name": "Hammam tradicional",
+    "category": "naturaleza",
+    "duration_h": 2,
+    "price_eur": 30,
+    "area": "Medina"
+   },
+   {
+    "name": "Noche en el desierto de Agafay",
+    "category": "aventura",
+    "duration_h": 7,
+    "price_eur": 90,
+    "area": "Agafay"
+   }
+  ]
+ },
+ {
+  "id": "copenhague",
+  "name": "Copenhague",
+  "country": "Dinamarca",
+  "flag": "🇩🇰",
+  "description": "Diseño nórdico, bicis, canales y algunos de los mejores restaurantes del mundo.",
+  "tags": [
+   "gastronomia",
+   "arte",
+   "diseno",
+   "nocturna"
+  ],
+  "climate": {
+   "avg_temp_c": [
+    2,
+    2,
+    4,
+    9,
+    13,
+    17,
+    19,
+    19,
+    15,
+    11,
+    6,
+    3
+   ],
+   "rain_days": [
+    10,
+    8,
+    9,
+    8,
+    8,
+    8,
+    9,
+    9,
+    10,
+    10,
+    11,
+    11
+   ]
+  },
+  "daily_cost_eur": {
+   "mochilero": 90,
+   "confort": 190,
+   "lujo": 450
+  },
+  "pois": [
+   {
+    "name": "Nyhavn y paseo en barco por los canales",
+    "category": "historia",
+    "duration_h": 2,
+    "price_eur": 15,
+    "area": "Nyhavn"
+   },
+   {
+    "name": "Louisiana Museum of Modern Art",
+    "category": "arte",
+    "duration_h": 4,
+    "price_eur": 22,
+    "area": "Humlebæk"
+   },
+   {
+    "name": "Street food en Reffen",
+    "category": "gastronomia",
+    "duration_h": 2,
+    "price_eur": 20,
+    "area": "Refshaleøen"
+   },
+   {
+    "name": "Tour de diseño danés en bici",
+    "category": "diseno",
+    "duration_h": 3,
+    "price_eur": 35,
+    "area": "Centro"
+   },
+   {
+    "name": "Jardines de Tivoli",
+    "category": "nocturna",
+    "duration_h": 3,
+    "price_eur": 20,
+    "area": "Vesterbro"
+   },
+   {
+    "name": "CopenHill: esquí sobre una planta de energía",
+    "category": "aventura",
+    "duration_h": 2,
+    "price_eur": 25,
+    "area": "Amager"
+   },
+   {
+    "name": "Christiania y Freetown",
+    "category": "historia",
+    "duration_h": 2,
+    "price_eur": 0,
+    "area": "Christianshavn"
+   },
+   {
+    "name": "Cena New Nordic",
+    "category": "gastronomia",
+    "duration_h": 3,
+    "price_eur": 140,
+    "area": "Indre By"
+   }
+  ]
+ },
+ {
+  "id": "seul",
+  "name": "Seúl",
+  "country": "Corea del Sur",
+  "flag": "🇰🇷",
+  "description": "Tecnología, K-culture, palacios y una comida callejera adictiva.",
+  "tags": [
+   "tecnologia",
+   "gastronomia",
+   "nocturna",
+   "historia",
+   "compras"
+  ],
+  "climate": {
+   "avg_temp_c": [
+    -2,
+    1,
+    7,
+    13,
+    19,
+    23,
+    26,
+    27,
+    22,
+    15,
+    7,
+    0
+   ],
+   "rain_days": [
+    5,
+    5,
+    6,
+    7,
+    8,
+    10,
+    16,
+    14,
+    8,
+    5,
+    7,
+    6
+   ]
+  },
+  "daily_cost_eur": {
+   "mochilero": 60,
+   "confort": 130,
+   "lujo": 330
+  },
+  "pois": [
+   {
+    "name": "Palacio Gyeongbokgung con hanbok",
+    "category": "historia",
+    "duration_h": 3,
+    "price_eur": 3,
+    "area": "Jongno"
+   },
+   {
+    "name": "Mercado de Gwangjang",
+    "category": "gastronomia",
+    "duration_h": 2,
+    "price_eur": 15,
+    "area": "Jongno"
+   },
+   {
+    "name": "Dongdaemun Design Plaza",
+    "category": "tecnologia",
+    "duration_h": 2,
+    "price_eur": 0,
+    "area": "Dongdaemun"
+   },
+   {
+    "name": "Gangnam y COEX",
+    "category": "compras",
+    "duration_h": 4,
+    "price_eur": 0,
+    "area": "Gangnam"
+   },
+   {
+    "name": "Barbacoa coreana en Mapo",
+    "category": "gastronomia",
+    "duration_h": 2,
+    "price_eur": 30,
+    "area": "Mapo"
+   },
+   {
+    "name": "Vida nocturna en Hongdae",
+    "category": "nocturna",
+    "duration_h": 4,
+    "price_eur": 30,
+    "area": "Hongdae"
+   },
+   {
+    "name": "N Seoul Tower al atardecer",
+    "category": "fotografia",
+    "duration_h": 2,
+    "price_eur": 15,
+    "area": "Namsan"
+   },
+   {
+    "name": "Bukchon Hanok Village",
+    "category": "historia",
+    "duration_h": 2,
+    "price_eur": 0,
+    "area": "Bukchon"
+   }
+  ]
+ },
+ {
+  "id": "buenosaires",
+  "name": "Buenos Aires",
+  "country": "Argentina",
+  "flag": "🇦🇷",
+  "description": "Tango, parrillas, librerías y barrios con mucha personalidad.",
+  "tags": [
+   "gastronomia",
+   "nocturna",
+   "arte",
+   "historia"
+  ],
+  "climate": {
+   "avg_temp_c": [
+    25,
+    24,
+    22,
+    18,
+    15,
+    12,
+    11,
+    13,
+    15,
+    18,
+    21,
+    24
+   ],
+   "rain_days": [
+    8,
+    7,
+    7,
+    7,
+    6,
+    6,
+    6,
+    6,
+    6,
+    8,
+    8,
+    8
+   ]
+  },
+  "daily_cost_eur": {
+   "mochilero": 45,
+   "confort": 95,
+   "lujo": 240
+  },
+  "pois": [
+   {
+    "name": "Caminito y La Boca",
+    "category": "arte",
+    "duration_h": 2,
+    "price_eur": 0,
+    "area": "La Boca"
+   },
+   {
+    "name": "Milonga de tango",
+    "category": "nocturna",
+    "duration_h": 3,
+    "price_eur": 20,
+    "area": "San Telmo"
+   },
+   {
+    "name": "Parrilla en Palermo",
+    "category": "gastronomia",
+    "duration_h": 2,
+    "price_eur": 35,
+    "area": "Palermo"
+   },
+   {
+    "name": "Librería El Ateneo Grand Splendid",
+    "category": "arte",
+    "duration_h": 1,
+    "price_eur": 0,
+    "area": "Recoleta"
+   },
+   {
+    "name": "Cementerio de la Recoleta",
+    "category": "historia",
+    "duration_h": 2,
+    "price_eur": 10,
+    "area": "Recoleta"
+   },
+   {
+    "name": "Feria de San Telmo",
+    "category": "historia",
+    "duration_h": 3,
+    "price_eur": 0,
+    "area": "San Telmo"
+   },
+   {
+    "name": "Delta del Tigre",
+    "category": "naturaleza",
+    "duration_h": 6,
+    "price_eur": 25,
+    "area": "Tigre"
+   },
+   {
+    "name": "Bares notables y vermut",
+    "category": "nocturna",
+    "duration_h": 3,
+    "price_eur": 20,
+    "area": "Centro"
+   }
+  ]
+ },
+ {
+  "id": "ciudaddelcabo",
+  "name": "Ciudad del Cabo",
+  "country": "Sudáfrica",
+  "flag": "🇿🇦",
+  "description": "Montaña, océano, viñedos y fauna en un mismo viaje.",
+  "tags": [
+   "naturaleza",
+   "aventura",
+   "gastronomia",
+   "playa"
+  ],
+  "climate": {
+   "avg_temp_c": [
+    22,
+    22,
+    21,
+    19,
+    16,
+    14,
+    13,
+    14,
+    15,
+    17,
+    19,
+    21
+   ],
+   "rain_days": [
+    2,
+    2,
+    3,
+    6,
+    9,
+    10,
+    10,
+    10,
+    7,
+    5,
+    3,
+    3
+   ]
+  },
+  "daily_cost_eur": {
+   "mochilero": 50,
+   "confort": 115,
+   "lujo": 310
+  },
+  "pois": [
+   {
+    "name": "Table Mountain en teleférico",
+    "category": "naturaleza",
+    "duration_h": 4,
+    "price_eur": 25,
+    "area": "City Bowl"
+   },
+   {
+    "name": "Pingüinos de Boulders Beach",
+    "category": "naturaleza",
+    "duration_h": 2,
+    "price_eur": 12,
+    "area": "Simon's Town"
+   },
+   {
+    "name": "Cabo de Buena Esperanza",
+    "category": "aventura",
+    "duration_h": 6,
+    "price_eur": 20,
+    "area": "Península"
+   },
+   {
+    "name": "Viñedos de Stellenbosch",
+    "category": "gastronomia",
+    "duration_h": 7,
+    "price_eur": 60,
+    "area": "Winelands"
+   },
+   {
+    "name": "Barrio de Bo-Kaap",
+    "category": "fotografia",
+    "duration_h": 2,
+    "price_eur": 0,
+    "area": "Bo-Kaap"
+   },
+   {
+    "name": "Atardecer en Camps Bay",
+    "category": "playa",
+    "duration_h": 3,
+    "price_eur": 0,
+    "area": "Camps Bay"
+   },
+   {
+    "name": "V&A Waterfront y Zeitz MOCAA",
+    "category": "arte",
+    "duration_h": 3,
+    "price_eur": 15,
+    "area": "Waterfront"
+   }
+  ]
+ },
+ {
+  "id": "nuevayork",
+  "name": "Nueva York",
+  "country": "Estados Unidos",
+  "flag": "🇺🇸",
+  "description": "La ciudad que nunca duerme: museos, rascacielos y barrios icónicos.",
+  "tags": [
+   "arte",
+   "compras",
+   "nocturna",
+   "gastronomia",
+   "tecnologia"
+  ],
+  "climate": {
+   "avg_temp_c": [
+    1,
+    2,
+    6,
+    12,
+    18,
+    23,
+    26,
+    25,
+    21,
+    15,
+    9,
+    4
+   ],
+   "rain_days": [
+    11,
+    10,
+    11,
+    11,
+    11,
+    10,
+    10,
+    9,
+    9,
+    9,
+    10,
+    11
+   ]
+  },
+  "daily_cost_eur": {
+   "mochilero": 110,
+   "confort": 250,
+   "lujo": 600
+  },
+  "pois": [
+   {
+    "name": "MoMA",
+    "category": "arte",
+    "duration_h": 3,
+    "price_eur": 30,
+    "area": "Midtown"
+   },
+   {
+    "name": "High Line y Chelsea Market",
+    "category": "gastronomia",
+    "duration_h": 3,
+    "price_eur": 25,
+    "area": "Chelsea"
+   },
+   {
+    "name": "Central Park en bici",
+    "category": "naturaleza",
+    "duration_h": 3,
+    "price_eur": 20,
+    "area": "Upper West Side"
+   },
+   {
+    "name": "Puente de Brooklyn y DUMBO",
+    "category": "fotografia",
+    "duration_h": 3,
+    "price_eur": 0,
+    "area": "Brooklyn"
+   },
+   {
+    "name": "Mirador Summit One Vanderbilt",
+    "category": "fotografia",
+    "duration_h": 2,
+    "price_eur": 45,
+    "area": "Midtown"
+   },
+   {
+    "name": "Musical en Broadway",
+    "category": "nocturna",
+    "duration_h": 3,
+    "price_eur": 120,
+    "area": "Theater District"
+   },
+   {
+    "name": "Pizza y bagels en Brooklyn",
+    "category": "gastronomia",
+    "duration_h": 2,
+    "price_eur": 20,
+    "area": "Williamsburg"
+   },
+   {
+    "name": "SoHo de compras",
+    "category": "compras",
+    "duration_h": 3,
+    "price_eur": 0,
+    "area": "SoHo"
+   }
+  ]
+ }
+]
