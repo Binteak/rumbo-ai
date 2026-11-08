@@ -34,7 +34,7 @@ if errorlevel 1 (
 if not exist "backend\.env" copy "backend\.env.example" "backend\.env" >nul
 
 if not exist "frontend\node_modules" (
-  echo [3/4] Instalando dependencias del frontend (solo la primera vez)...
+  echo [3/4] Instalando dependencias del frontend, solo la primera vez...
   pushd frontend
   call npm install
   popd
