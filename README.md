@@ -67,6 +67,10 @@ Herramientas del agente:
 
 Requisitos: Python 3.11+ y Node 20.19+.
 
+**En Windows, lo más rápido:** doble clic en `iniciar.bat`. Instala lo necesario la primera vez, abre backend y frontend y lanza el navegador en http://localhost:4200.
+
+O a mano:
+
 ```bash
 # Backend
 cd backend
