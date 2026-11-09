@@ -1,12 +1,13 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
+import { environment } from '../../environments/environment';
 import { AgentEvent, GlobalStats, Health, Trip } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private readonly http = inject(HttpClient);
-  private readonly base = '/api';
+  private readonly base = environment.apiBase;
 
   health(): Observable<Health> {
     return this.http.get<Health>(`${this.base}/health`);
