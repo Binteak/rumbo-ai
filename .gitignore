@@ -16,3 +16,6 @@ coverage/
 # Sistema
 .DS_Store
 Thumbs.db
+
+# Redis
+*.rdb
