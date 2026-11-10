@@ -341,6 +341,10 @@ frontend/
 - **Cuotas gratuitas:** con mucho tráfico, la IA real se agota antes y la app pasa al modo demo (por diseño, sin errores ni costes).
 - **Datos de ejemplo:** el clima, los costes y las actividades de los destinos son aproximados y sirven para la demostración.
 
+## Créditos
+
+- Banderas en Chrome y Edge para Windows (que no dibujan los emojis de bandera): [country-flag-emoji-polyfill](https://github.com/talkjs/country-flag-emoji-polyfill) (MIT), con la fuente de banderas de [Twemoji](https://github.com/jdecked/twemoji) (CC-BY 4.0). La fuente se sirve desde la propia web y solo se descarga en los navegadores que la necesitan.
+
 ## Próximos pasos
 
 **Producto**
