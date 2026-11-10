@@ -11,7 +11,8 @@ Rumbo AI — Licencia propietaria
    Sin necesidad de permiso previo, cualquier persona puede:
    a) ver y leer el código fuente en este repositorio;
    b) descargarlo y ejecutarlo en local con el único fin de evaluar el trabajo del autor
-      (por ejemplo, en un proceso de selección o una revisión técnica).
+      (por ejemplo, en un proceso de selección o una revisión técnica). Terminada la
+      evaluación, las copias descargadas deben eliminarse.
 
 3. Usos no permitidos
    Salvo autorización previa y por escrito del autor, no se permite:
@@ -19,7 +20,14 @@ Rumbo AI — Licencia propietaria
    b) modificarlo o crear obras derivadas para distribuirlas o publicarlas;
    c) distribuirlo, sublicenciarlo, venderlo o publicarlo, con o sin cambios;
    d) usarlo con fines comerciales o desplegarlo como servicio para terceros;
-   e) presentarlo, en todo o en parte, como trabajo propio (por ejemplo, en un portfolio).
+   e) usarlo dentro de una empresa u organización para cualquier fin distinto de evaluar
+      al autor, aunque no se distribuya: por ejemplo, incorporarlo a productos, herramientas
+      o procesos internos, o tomarlo como base para desarrollar algo equivalente;
+   f) usarlo para entrenar, ajustar o evaluar modelos de inteligencia artificial;
+   g) presentarlo, en todo o en parte, como trabajo propio (por ejemplo, en un portfolio).
+
+   Haber evaluado el Software en un proceso de selección no concede ningún derecho de uso
+   sobre él, tanto si se contrata al autor como si no.
 
 4. Componentes de terceros
    Las dependencias y los recursos de terceros incluidos o referenciados (por ejemplo, los
@@ -40,7 +48,11 @@ Copyright (c) 2026 Alvaro Ruiz Ramírez. All rights reserved.
 
 You may view the source code in this repository, and download and run it locally solely
 to evaluate the author's work (for example, in a hiring process or technical review).
-Without the author's prior written permission, you may not copy, reuse, modify,
-distribute, sublicense, sell, publish, deploy as a service, use commercially, or present
-as your own any part of this software. Third-party components keep their own licenses.
+Copies must be deleted once the evaluation ends. Without the author's prior written
+permission, you may not copy, reuse, modify, distribute, sublicense, sell, publish,
+deploy as a service, use commercially, use internally within any company or organization
+for any purpose other than evaluating the author (including as a basis for building
+something equivalent), use to train or evaluate AI models, or present as your own any
+part of this software. Evaluating it in a hiring process grants no right to use it,
+whether or not the author is hired. Third-party components keep their own licenses.
 The software is provided "as is", without warranty of any kind.

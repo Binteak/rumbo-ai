@@ -367,4 +367,4 @@ frontend/
 
 ## Licencia
 
-© 2026 Alvaro Ruiz Ramírez. Todos los derechos reservados. Puedes ver el código y ejecutarlo en local para evaluar este trabajo, pero no copiarlo, reutilizarlo ni redistribuirlo sin permiso. Detalles en [LICENSE](LICENSE).
+© 2026 Alvaro Ruiz Ramírez. Todos los derechos reservados. Puedes ver el código y ejecutarlo en local para evaluar este trabajo, pero no copiarlo, reutilizarlo, redistribuirlo ni usarlo en ninguna empresa u organización sin permiso por escrito. Detalles en [LICENSE](LICENSE).
