@@ -6,7 +6,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.main as main
-from app.agent import Agent, DemoProvider, GuardedProvider, OpenAICompatibleProvider, RateLimited, RunStats, ToolContext
+from app.agent import (
+    Agent,
+    DemoProvider,
+    GuardedProvider,
+    OpenAICompatibleProvider,
+    ProviderUnavailable,
+    RateLimited,
+    RunStats,
+    ToolContext,
+)
 from app.agent.providers import Block, ModelTurn, to_openai_messages, to_openai_tools
 from app.agent.tools import tool_schemas
 from app.limits import LimitsConfig, MemoryCounterStore, RedisCounterStore, UsageLimits, client_ip
@@ -72,7 +81,9 @@ def provider_with(responses, seen=None):
             seen.append(json.loads(request.content))
         return queue.pop(0)
 
-    return OpenAICompatibleProvider("gsk-test", "openai/gpt-oss-120b", transport=httpx.MockTransport(handler))
+    return OpenAICompatibleProvider(
+        "gsk-test", "openai/gpt-oss-120b", transport=httpx.MockTransport(handler), sleep=lambda _s: None
+    )
 
 
 def test_provider_parses_tool_calls_usage_and_sends_low_reasoning():
@@ -135,6 +146,33 @@ def test_provider_retries_once_on_malformed_tool_call():
         [httpx.Response(400, json={"error": {"code": "tool_use_failed"}}), httpx.Response(200, json=completion("ok"))]
     )
     assert p.complete("s", [], [{"role": "user", "content": "x"}]).blocks[0].text == "ok"
+
+
+def test_provider_retries_on_503_and_recovers():
+    p = provider_with(
+        [httpx.Response(503, json={"error": {"status": "UNAVAILABLE"}}), httpx.Response(200, json=completion("ok"))]
+    )
+    assert p.complete("s", [], [{"role": "user", "content": "x"}]).blocks[0].text == "ok"
+
+
+def test_provider_does_not_retry_on_read_timeout():
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    p = OpenAICompatibleProvider("k", "gemini-flash-latest", transport=httpx.MockTransport(handler), sleep=lambda _s: None)
+    with pytest.raises(ProviderUnavailable):
+        p.complete("s", [], [{"role": "user", "content": "x"}])
+    assert len(calls) == 1
+
+
+def test_provider_raises_unavailable_after_repeated_503():
+    p = provider_with([httpx.Response(503, text="The model is overloaded")] * 3)
+    with pytest.raises(ProviderUnavailable) as e:
+        p.complete("s", [], [{"role": "user", "content": "x"}])
+    assert "503" in str(e.value)
 
 
 def test_full_agent_run_with_openai_compatible_provider():
@@ -380,3 +418,12 @@ def test_model_receives_compact_tool_results():
     assert set(sent) == {"destination", "days"} and isinstance(sent["days"][0]["plan"][0], str)
     full = next(e for e in events if e["type"] == "tool_result")["output"]
     assert "activities" in full["days"][0]  # la interfaz sigue recibiendo el detalle completo
+
+
+def test_guarded_falls_back_to_demo_when_provider_unavailable():
+    budget = FakeBudget()
+    g = GuardedProvider(Scripted([ProviderUnavailable("HTTP 503")]), DemoProvider(), budget)
+    events = list(Agent(g).run([], "¿Necesito visado para Japón?", ToolContext(), stats := RunStats()))
+    assert budget.cooldowns == [30] and g.name == "demo"
+    assert any(e["type"] == "notice" and "saturado" in e["text"] for e in events)
+    assert stats.status == "completed"

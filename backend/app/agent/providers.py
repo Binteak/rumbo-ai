@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -52,6 +54,14 @@ class RateLimited(Exception):
         self.retry_after = retry_after
 
 
+class ProviderUnavailable(Exception):
+    """El proveedor no está disponible (HTTP 5xx, sobrecarga o error de red) tras reintentar."""
+
+
+# Errores temporales del proveedor: Gemini responde 503 cuando el modelo está saturado.
+TRANSIENT_STATUS = {500, 502, 503, 504, 529}
+
+
 class ModelProvider(Protocol):
     name: str
     model: str
@@ -80,6 +90,8 @@ class AnthropicProvider:
         except anthropic.RateLimitError as e:
             retry = e.response.headers.get("retry-after") if e.response is not None else None
             raise RateLimited(float(retry) if retry else None, str(e)) from e
+        except (anthropic.InternalServerError, anthropic.APIConnectionError) as e:
+            raise ProviderUnavailable(str(e)) from e
 
     def _complete(self, system: str, tools: list[dict], messages: list[dict]) -> ModelTurn:
         response = self.client.beta.messages.create(
@@ -192,14 +204,21 @@ class OpenAICompatibleProvider:
         base_url: str = "https://api.groq.com/openai/v1",
         name: str = "groq",
         max_tokens: int = 2048,
-        timeout_s: float = 60.0,
+        timeout_s: float = 45.0,
         transport: httpx.BaseTransport | None = None,
+        retry_delays: tuple[float, ...] = (2.0, 5.0),
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.name = name
         self.model = model
         self.max_tokens = max_tokens
+        self.retry_delays = retry_delays
+        self.sleep = sleep
         self.client = httpx.Client(
-            base_url=base_url, headers={"Authorization": f"Bearer {api_key}"}, timeout=timeout_s, transport=transport
+            base_url=base_url,
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=httpx.Timeout(timeout_s, connect=10.0),
+            transport=transport,
         )
 
     def _payload(self, system: str, tools: list[dict], messages: list[dict]) -> dict:
@@ -218,7 +237,7 @@ class OpenAICompatibleProvider:
     def complete(self, system: str, tools: list[dict], messages: list[dict]) -> ModelTurn:
         payload = self._payload(system, tools, messages)
         for attempt in range(2):
-            r = self.client.post("/chat/completions", json=payload)
+            r = self._post(payload)
             if r.status_code == 429:
                 raise RateLimited(_retry_after(r), r.text[:300])
             # Algunos modelos abiertos generan a veces una llamada a herramienta mal formada
@@ -228,6 +247,25 @@ class OpenAICompatibleProvider:
             r.raise_for_status()
             return self._parse(r.json())
         raise RuntimeError("El modelo no ha generado una llamada a herramienta válida")
+
+    def _post(self, payload: dict) -> httpx.Response:
+        """POST con reintentos ante errores temporales (5xx, timeouts, red) y espera creciente."""
+        last = ""
+        for attempt in range(len(self.retry_delays) + 1):
+            if attempt:
+                self.sleep(self.retry_delays[attempt - 1])
+            try:
+                r = self.client.post("/chat/completions", json=payload)
+            except httpx.ReadTimeout as e:
+                # El modelo ya ha tardado el timeout entero: reintentar multiplicaría la espera.
+                raise ProviderUnavailable(f"{self.name} no ha respondido a tiempo") from e
+            except (httpx.TimeoutException, httpx.TransportError) as e:
+                last = f"{type(e).__name__}: {e}"
+                continue
+            if r.status_code not in TRANSIENT_STATUS:
+                return r
+            last = f"HTTP {r.status_code}: {r.text[:200]}"
+        raise ProviderUnavailable(f"{self.name} no disponible tras reintentar ({last})")
 
     @staticmethod
     def _parse(data: dict) -> ModelTurn:

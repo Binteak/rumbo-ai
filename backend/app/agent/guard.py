@@ -17,7 +17,7 @@ import time
 from collections.abc import Callable
 from typing import Protocol
 
-from .providers import ModelProvider, ModelTurn, RateLimited
+from .providers import ModelProvider, ModelTurn, ProviderUnavailable, RateLimited
 
 log = logging.getLogger("rumbo.llm")
 
@@ -69,8 +69,14 @@ class GuardedProvider:
                             continue
                         log.warning("Cuota del proveedor agotada (%s): paso al modo demo", e)
                         self.budget.cooldown(wait or 60)
+                        notice = "El proveedor de IA ha alcanzado su cuota gratuita: continúo en modo demo."
                         break
-                notice = "El proveedor de IA ha alcanzado su cuota gratuita: continúo en modo demo."
+                    except ProviderUnavailable as e:
+                        # Sobrecarga temporal (p. ej. Gemini 503): pausa breve para no insistir y modo demo.
+                        log.warning("Proveedor no disponible (%s): paso al modo demo", e)
+                        self.budget.cooldown(30)
+                        notice = "El modelo de IA está saturado ahora mismo: continúo en modo demo."
+                        break
             else:
                 notice = "Se ha agotado el presupuesto diario de IA real: continúo en modo demo."
             self.switched = True
