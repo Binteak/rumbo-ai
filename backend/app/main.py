@@ -7,7 +7,7 @@ import logging
 import uuid
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -145,6 +145,8 @@ def _sse(event: dict) -> str:
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
     session_id: str | None = None
+    # "real": el modelo configurado (si hay cupo); "demo": fuerza el modo demo, sin gastar cupo ni tokens.
+    mode: Literal["real", "demo"] = "real"
 
 
 @app.get("/api/health")
@@ -227,7 +229,7 @@ def chat(req: ChatRequest, request: Request) -> StreamingResponse | JSONResponse
         )
     session_id = req.session_id or str(uuid.uuid4())
     lock = sessions.lock(session_id)
-    run_provider, notice = provider_for_run(ip)
+    run_provider, notice = (demo_provider, None) if req.mode == "demo" else provider_for_run(ip)
     agent = Agent(run_provider, max_iterations=settings.agent_max_iterations)
 
     def stream() -> Iterator[str]:

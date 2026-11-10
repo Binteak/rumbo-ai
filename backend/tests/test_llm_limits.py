@@ -356,6 +356,16 @@ def test_ip_over_quota_gets_demo_mode_with_notice(real_ai):
         assert usage["mode"] == "groq" and usage["real_ai"] is False and usage["remaining"]["hour"] == 0
 
 
+def test_user_can_force_demo_mode_without_spending_quota(real_ai):
+    with TestClient(main.app) as client:
+        events = sse(client.post("/api/chat", json={"message": "hola", "mode": "demo"}).text)
+        assert events[0]["mode"] == "demo" and not any(e["type"] == "notice" for e in events)
+        assert real_ai.tokens_remaining() == real_ai.config.daily_token_budget
+        assert client.get("/api/usage").json()["remaining"]["hour"] == 1  # el cupo sigue intacto
+        assert sse(client.post("/api/chat", json={"message": "hola"}).text)[0]["mode"] == "groq"
+        assert client.post("/api/chat", json={"message": "hola", "mode": "otro"}).status_code == 422
+
+
 def test_flood_returns_429(real_ai):
     with TestClient(main.app) as client:
         codes = [client.post("/api/chat", json={"message": "hola"}).status_code for _ in range(6)]

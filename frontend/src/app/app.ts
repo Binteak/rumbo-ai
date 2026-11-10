@@ -28,6 +28,31 @@ import { AgentStore } from './core/agent.store';
         </div>
       }
 
+      @if (store.realAvailable()) {
+        <div class="mode-switch" role="group" aria-label="Modo del agente">
+          <button
+            type="button"
+            [class.active]="store.preferredMode() === 'demo'"
+            [attr.aria-pressed]="store.preferredMode() === 'demo'"
+            [disabled]="store.running()"
+            title="Respuestas con reglas, instantáneas y sin coste"
+            (click)="store.setMode('demo')"
+          >
+            Demo
+          </button>
+          <button
+            type="button"
+            [class.active]="store.preferredMode() === 'real'"
+            [attr.aria-pressed]="store.preferredMode() === 'real'"
+            [disabled]="store.running()"
+            [title]="'Respuestas con ' + store.modelLabel()"
+            (click)="store.setMode('real')"
+          >
+            {{ store.providerLabel() }}
+          </button>
+        </div>
+      }
+
       @if (store.health(); as h) {
         @let u = store.usage();
         <span class="mode" [class.demo]="store.isDemo()" [title]="modeHint()">
@@ -36,6 +61,8 @@ import { AgentStore } from './core/agent.store';
             @if (u?.remaining; as r) {
               · te quedan {{ r.hour }}
             }
+          } @else if (store.preferredMode() === 'demo' && store.realAvailable()) {
+            <i></i>Modo demo · sin coste
           } @else if (u && u.mode !== 'demo') {
             <i></i>Modo demo · cupo de IA real agotado
           } @else {
@@ -59,6 +86,8 @@ export class App implements OnInit {
 
   protected modeHint(): string {
     const u = this.store.usage();
+    if (this.store.preferredMode() === 'demo' && this.store.realAvailable())
+      return 'Has elegido el modo demo: el agente responde con reglas y no gasta cupo de IA real.';
     if (!u || u.mode === 'demo') return 'Sin modelo configurado: el agente funciona con reglas, sin coste.';
     return `Modelo gratuito con límites: ${u.remaining?.hour ?? 0} consultas esta hora y ${u.remaining?.day ?? 0} hoy. Después, modo demo.`;
   }

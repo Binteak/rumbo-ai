@@ -1,7 +1,28 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { ApiService } from './api.service';
-import { AgentEvent, ChatMessage, GlobalStats, Health, RagSearch, RunStats, TraceStep, Trip, Usage } from './models';
+import {
+  AgentEvent,
+  ChatMessage,
+  ChatMode,
+  GlobalStats,
+  Health,
+  RagSearch,
+  RunStats,
+  TraceStep,
+  Trip,
+  Usage,
+} from './models';
+
+const MODE_KEY = 'rumbo.mode';
+
+function loadMode(): ChatMode {
+  try {
+    return localStorage.getItem(MODE_KEY) === 'demo' ? 'demo' : 'real';
+  } catch {
+    return 'real';
+  }
+}
 
 export const TOOL_LABELS: Record<string, string> = {
   search_destinations: 'Buscar destinos',
@@ -29,9 +50,27 @@ export class AgentStore {
   readonly selectedTrip = signal<Trip | null>(null);
   readonly stats = signal<GlobalStats | null>(null);
   readonly sessionId = signal<string | null>(null);
+  /** Modo elegido en la interfaz: el modelo real o el demo (se recuerda en el navegador). */
+  readonly preferredMode = signal<ChatMode>(loadMode());
+
+  /** True si el backend tiene un modelo real configurado (Gemini, Groq o Claude). */
+  readonly realAvailable = computed(() => {
+    const mode = this.usage()?.mode ?? this.health()?.mode;
+    return !!mode && mode !== 'demo';
+  });
+  /** "gemini" → "Gemini". */
+  readonly providerLabel = computed(() => {
+    const mode = this.usage()?.mode ?? this.health()?.mode ?? '';
+    return mode ? mode[0].toUpperCase() + mode.slice(1) : 'IA real';
+  });
+  /** Modo con el que se enviará el próximo mensaje. */
+  readonly effectiveMode = computed<ChatMode>(() =>
+    this.realAvailable() && this.preferredMode() === 'real' ? 'real' : 'demo',
+  );
 
   /** True si la próxima respuesta será del modo demo (sin modelo configurado o con el cupo agotado). */
   readonly isDemo = computed(() => {
+    if (this.effectiveMode() === 'demo') return true;
     const u = this.usage();
     return u ? !u.real_ai : this.health()?.mode === 'demo';
   });
@@ -53,6 +92,15 @@ export class AgentStore {
     this.api.usage().subscribe({ next: (u) => this.usage.set(u), error: () => this.usage.set(null) });
   }
 
+  setMode(mode: ChatMode): void {
+    this.preferredMode.set(mode);
+    try {
+      localStorage.setItem(MODE_KEY, mode);
+    } catch {
+      /* sin almacenamiento disponible: la elección dura lo que la pestaña */
+    }
+  }
+
   send(text: string): void {
     const message = text.trim();
     if (!message || this.running()) return;
@@ -62,7 +110,7 @@ export class AgentStore {
     this.lastRun.set(null);
     this.running.set(true);
 
-    this.sub = this.api.chat(message, this.sessionId()).subscribe({
+    this.sub = this.api.chat(message, this.sessionId(), this.effectiveMode()).subscribe({
       next: (event) => this.handle(event),
       error: (err: Error) => {
         this.pushStep({ id: crypto.randomUUID(), kind: 'error', title: 'Error de conexión', detail: err.message, status: 'error' });

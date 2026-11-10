@@ -68,6 +68,9 @@ export type AgentEvent =
   | { type: 'error'; message: string }
   | { type: 'done'; stats: RunStats };
 
+/** Quién responde: el modelo real configurado (Gemini, Groq, Claude) o el modo demo. */
+export type ChatMode = 'real' | 'demo';
+
 export interface Health {
   status: string;
   mode: string;

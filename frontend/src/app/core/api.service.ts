@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { AgentEvent, GlobalStats, Health, Trip, Usage } from './models';
+import { AgentEvent, ChatMode, GlobalStats, Health, Trip, Usage } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -37,7 +37,7 @@ export class ApiService {
    * Envía un mensaje y emite cada evento del agente en cuanto llega (Server-Sent Events sobre POST).
    * Se usa fetch + ReadableStream porque EventSource solo admite GET.
    */
-  chat(message: string, sessionId: string | null): Observable<AgentEvent> {
+  chat(message: string, sessionId: string | null, mode: ChatMode = 'real'): Observable<AgentEvent> {
     return new Observable<AgentEvent>((subscriber) => {
       const controller = new AbortController();
 
@@ -45,7 +45,7 @@ export class ApiService {
         const res = await fetch(`${this.base}/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message, session_id: sessionId }),
+          body: JSON.stringify({ message, session_id: sessionId, mode }),
           signal: controller.signal,
         });
         if (res.status === 429) {

@@ -27,6 +27,24 @@ describe('AgentStore', () => {
     store = TestBed.inject(AgentStore);
   });
 
+  it('permite elegir el modo demo aunque haya un modelo real', () => {
+    const api = TestBed.inject(ApiService) as unknown as { chat: (...a: unknown[]) => unknown };
+    const chat = vi.spyOn(api, 'chat');
+    store.init();
+    expect(store.realAvailable()).toBe(true);
+    expect(store.providerLabel()).toBe('Groq');
+
+    store.setMode('demo');
+    expect(store.isDemo()).toBe(true);
+    store.send('3 días en Lisboa');
+    expect(chat).toHaveBeenLastCalledWith('3 días en Lisboa', null, 'demo');
+    store.stop();
+
+    store.setMode('real');
+    store.send('3 días en Lisboa');
+    expect(chat).toHaveBeenLastCalledWith('3 días en Lisboa', null, 'real');
+  });
+
   it('construye la traza a partir de los eventos del agente', () => {
     store.send('3 días en Seúl');
     expect(store.running()).toBe(true);
