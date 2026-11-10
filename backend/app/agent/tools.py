@@ -95,6 +95,11 @@ class ItineraryArgs(BaseModel):
     interests: list[Interest] = Field(default_factory=list)
 
 
+class SearchGuidesArgs(BaseModel):
+    query: str = Field(min_length=3, max_length=300, description="Pregunta práctica del viajero, en sus palabras")
+    destination_id: str | None = Field(None, description="Id del destino para filtrar, si la pregunta es de uno concreto")
+
+
 class SaveTripArgs(BaseModel):
     title: str = Field(min_length=3, max_length=160, description="Título atractivo del viaje")
     destination_id: str
@@ -234,6 +239,32 @@ def build_itinerary(args: ItineraryArgs) -> dict:
     return {"destination": d["name"], "days": days}
 
 
+def search_travel_guides(args: SearchGuidesArgs) -> dict:
+    """RAG: recupera los fragmentos de las guías más relevantes para la pregunta."""
+    from ..config import get_settings
+    from ..rag import get_rag
+
+    if args.destination_id:
+        _get_destination(args.destination_id)
+    result = get_rag().retriever.search(args.query, k=get_settings().rag_top_k, destination_id=args.destination_id)
+    out = {
+        "query": args.query,
+        "destination_id": result.destination_id,
+        "retrieval": result.mode,
+        "expanded_terms": result.expanded_terms,
+        "timings_ms": result.timings_ms,
+        "results": [h.to_dict() for h in result.hits],
+    }
+    if result.hits:
+        out["instructions"] = (
+            "Responde solo con la información de estos fragmentos y cita la fuente como (Guía de <destino> · <sección>). "
+            "Recuerda al usuario que verifique los requisitos oficiales de entrada antes de viajar."
+        )
+    else:
+        out["instructions"] = "Las guías no cubren esta pregunta: dilo al usuario en lugar de inventar la respuesta."
+    return out
+
+
 # --- Registro -----------------------------------------------------------------
 
 
@@ -300,6 +331,14 @@ TOOLS: dict[str, Tool] = {
             "Genera un itinerario día a día con actividades reales del destino.",
             ItineraryArgs,
             build_itinerary,
+        ),
+        Tool(
+            "search_travel_guides",
+            "Busca en las guías prácticas de los destinos (RAG): documentación y visados, dinero y propinas, "
+            "transporte, seguridad, costumbres, enchufes, salud y dónde alojarse. Úsala para cualquier pregunta "
+            "práctica en lugar de responder de memoria.",
+            SearchGuidesArgs,
+            search_travel_guides,
         ),
         Tool(
             "save_trip",

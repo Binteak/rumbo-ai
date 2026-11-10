@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -19,15 +20,22 @@ from .agent import Agent, AnthropicProvider, DemoProvider, ModelProvider, RunSta
 from .agent.tools import destinations
 from .config import get_settings
 from .db import AgentRun, SessionLocal, Trip, get_db, init_db
+from .rag import get_rag
 from .sessions import build_session_store
 
 settings = get_settings()
+log = logging.getLogger("rumbo")
 DbSession = Annotated[Session, Depends(get_db)]
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    try:
+        # Indexa las guías al arrancar (incremental: solo lo nuevo o modificado).
+        get_rag()
+    except Exception:  # noqa: BLE001 - la API arranca igual; la herramienta reintentará al usarse
+        log.exception("No se pudo inicializar el RAG")
     yield
 
 
@@ -116,6 +124,32 @@ def ready() -> JSONResponse:
 @app.get("/api/destinations")
 def list_destinations() -> list[dict]:
     return [{k: d[k] for k in ("id", "name", "country", "flag", "description", "tags")} for d in destinations().values()]
+
+
+@app.get("/api/rag/status")
+def rag_status() -> dict:
+    """Qué embedder y qué almacén de vectores se están usando, y cuántos fragmentos hay indexados."""
+    return get_rag().status()
+
+
+@app.get("/api/rag/search")
+def rag_search(
+    q: Annotated[str, Query(min_length=3, max_length=300)],
+    destination_id: str | None = None,
+    k: Annotated[int, Query(ge=1, le=10)] = 4,
+) -> dict:
+    """La misma búsqueda que usa el agente, expuesta para depurar y enseñar el RAG."""
+    if destination_id and destination_id not in destinations():
+        raise HTTPException(404, "Destino desconocido")
+    result = get_rag().retriever.search(q, k=k, destination_id=destination_id)
+    return {
+        "query": q,
+        "destination_id": result.destination_id,
+        "retrieval": result.mode,
+        "expanded_terms": result.expanded_terms,
+        "timings_ms": result.timings_ms,
+        "results": [h.to_dict() for h in result.hits],
+    }
 
 
 @app.post("/api/chat")
