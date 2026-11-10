@@ -27,10 +27,14 @@ import { AgentStore } from '../core/agent.store';
           </div>
         }
         @for (m of store.messages(); track $index) {
-          <div class="msg" [class.user]="m.role === 'user'">
-            <span class="avatar">{{ m.role === 'user' ? 'Tú' : 'R' }}</span>
-            <p>{{ m.text }}</p>
-          </div>
+          @if (m.role === 'notice') {
+            <p class="chat-notice">{{ m.text }}</p>
+          } @else {
+            <div class="msg" [class.user]="m.role === 'user'">
+              <span class="avatar">{{ m.role === 'user' ? 'Tú' : 'R' }}</span>
+              <p>{{ m.text }}</p>
+            </div>
+          }
         }
         @if (store.running()) {
           <div class="msg">

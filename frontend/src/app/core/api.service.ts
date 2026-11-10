@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { AgentEvent, GlobalStats, Health, Trip } from './models';
+import { AgentEvent, GlobalStats, Health, Trip, Usage } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -11,6 +11,10 @@ export class ApiService {
 
   health(): Observable<Health> {
     return this.http.get<Health>(`${this.base}/health`);
+  }
+
+  usage(): Observable<Usage> {
+    return this.http.get<Usage>(`${this.base}/usage`);
   }
 
   trips(): Observable<Trip[]> {
@@ -44,6 +48,9 @@ export class ApiService {
           body: JSON.stringify({ message, session_id: sessionId }),
           signal: controller.signal,
         });
+        if (res.status === 429) {
+          throw new Error('Demasiadas peticiones seguidas. Espera un minuto y vuelve a intentarlo.');
+        }
         if (!res.ok || !res.body) {
           throw new Error(`Error ${res.status} al contactar con el agente`);
         }

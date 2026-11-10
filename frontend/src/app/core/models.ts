@@ -63,6 +63,7 @@ export type AgentEvent =
   | { type: 'tool_call'; id: string; name: string; input: Record<string, unknown> }
   | { type: 'tool_result'; id: string; name: string; output: unknown; is_error: boolean; duration_ms: number }
   | { type: 'trip'; trip: Trip }
+  | { type: 'notice'; text: string }
   | { type: 'final'; text: string }
   | { type: 'error'; message: string }
   | { type: 'done'; stats: RunStats };
@@ -71,6 +72,15 @@ export interface Health {
   status: string;
   mode: string;
   model: string;
+}
+
+/** Modo con el que se atenderá al usuario y cuántas consultas con IA real le quedan. */
+export interface Usage {
+  mode: string;
+  model: string;
+  real_ai: boolean;
+  remaining?: { hour: number; day: number };
+  budget_remaining_pct?: number;
 }
 
 export interface GlobalStats {
@@ -85,7 +95,7 @@ export interface GlobalStats {
 }
 
 export interface ChatMessage {
-  role: 'user' | 'agent';
+  role: 'user' | 'agent' | 'notice';
   text: string;
 }
 
@@ -112,7 +122,7 @@ export interface RagSearch {
 /** Paso visible en la traza del agente. */
 export interface TraceStep {
   id: string;
-  kind: 'thinking' | 'narration' | 'tool' | 'final' | 'error';
+  kind: 'thinking' | 'narration' | 'tool' | 'notice' | 'final' | 'error';
   title: string;
   detail?: string;
   input?: Record<string, unknown>;
