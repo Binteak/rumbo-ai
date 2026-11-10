@@ -67,6 +67,8 @@ class Agent:
                 stats.iterations += 1
                 yield {"type": "thinking", "iteration": stats.iterations}
                 turn = self.provider.complete(SYSTEM_PROMPT, tools, messages)
+                if turn.notice:
+                    yield {"type": "notice", "text": turn.notice}
                 stats.input_tokens += turn.input_tokens
                 stats.output_tokens += turn.output_tokens
                 messages.append({"role": "assistant", "content": turn.history_content})
