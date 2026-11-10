@@ -14,9 +14,24 @@ class Settings(BaseSettings):
     agent_model: str = "claude-sonnet-5-5"
     agent_effort: str = "medium"
     agent_max_iterations: int = 12
-    # "auto": usa Claude si hay API key y el modo demo si no. "demo" fuerza el modo demo.
+    # "auto": usa Claude si hay ANTHROPIC_API_KEY, si no Groq si hay GROQ_API_KEY, y si no el modo demo.
+    # "demo" fuerza el modo demo.
     agent_mode: str = "auto"
     demo_delay_ms: int = 700
+
+    # Modelo gratuito: cualquier API compatible con OpenAI. Por defecto, el plan Free de Groq (sin tarjeta).
+    groq_api_key: str | None = None
+    groq_model: str = "openai/gpt-oss-120b"
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    llm_max_output_tokens: int = 2048
+
+    # Protección y presupuesto (ver app/limits.py). El presupuesto diario por defecto deja margen
+    # bajo los 200.000 tokens/día del plan gratuito de Groq.
+    rate_limit_flood_per_minute: int = 20
+    rate_limit_llm_per_hour: int = 5
+    rate_limit_llm_per_day: int = 15
+    llm_daily_token_budget: int = 180_000
+    llm_min_tokens_per_run: int = 12_000
 
     # RAG: con VOYAGE_API_KEY usa embeddings de Voyage AI; sin ella, un embedder local gratuito.
     voyage_api_key: str | None = None
@@ -29,8 +44,19 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:4200"
 
     @property
+    def llm_provider(self) -> str:
+        """Proveedor real configurado: "claude", "groq" o "demo" si no hay ninguno."""
+        if self.agent_mode == "demo":
+            return "demo"
+        if self.anthropic_api_key:
+            return "claude"
+        if self.groq_api_key:
+            return "groq"
+        return "demo"
+
+    @property
     def use_demo(self) -> bool:
-        return self.agent_mode == "demo" or not self.anthropic_api_key
+        return self.llm_provider == "demo"
 
     @property
     def cors_list(self) -> list[str]:

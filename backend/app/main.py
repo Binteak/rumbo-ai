@@ -9,17 +9,27 @@ from collections.abc import Iterator
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from .agent import Agent, AnthropicProvider, DemoProvider, ModelProvider, RunStats, ToolContext
+from .agent import (
+    Agent,
+    AnthropicProvider,
+    DemoProvider,
+    GuardedProvider,
+    ModelProvider,
+    OpenAICompatibleProvider,
+    RunStats,
+    ToolContext,
+)
 from .agent.tools import destinations
 from .config import get_settings
 from .db import AgentRun, SessionLocal, Trip, get_db, init_db
+from .limits import LimitsConfig, build_limits, client_ip
 from .rag import get_rag
 from .sessions import build_session_store
 
@@ -48,17 +58,49 @@ app = FastAPI(
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_list, allow_methods=["*"], allow_headers=["*"])
 
 
-def build_provider() -> ModelProvider:
-    if settings.use_demo:
-        return DemoProvider(delay_s=settings.demo_delay_ms / 1000)
-    return AnthropicProvider(settings.anthropic_api_key, settings.agent_model, settings.agent_effort)
+def build_real_provider() -> ModelProvider | None:
+    """Modelo real configurado (Claude o uno gratuito compatible con OpenAI), o None para el modo demo."""
+    if settings.llm_provider == "claude":
+        return AnthropicProvider(settings.anthropic_api_key, settings.agent_model, settings.agent_effort)
+    if settings.llm_provider == "groq":
+        return OpenAICompatibleProvider(
+            settings.groq_api_key, settings.groq_model, settings.groq_base_url, max_tokens=settings.llm_max_output_tokens
+        )
+    return None
 
 
-provider = build_provider()
-agent = Agent(provider, max_iterations=settings.agent_max_iterations)
+real_provider = build_real_provider()
+demo_provider = DemoProvider(delay_s=settings.demo_delay_ms / 1000)
+# Para /api/health y la cabecera: el proveedor principal de esta instancia.
+provider: ModelProvider = real_provider or demo_provider
 
 # Historial por sesión: en memoria en local, en Redis cuando hay varias réplicas.
 sessions = build_session_store(settings.redis_url)
+# Límites de uso y presupuesto del modelo real (compartidos en Redis si hay varias réplicas).
+limits = build_limits(
+    settings.redis_url,
+    LimitsConfig(
+        flood_per_minute=settings.rate_limit_flood_per_minute,
+        llm_per_hour=settings.rate_limit_llm_per_hour,
+        llm_per_day=settings.rate_limit_llm_per_day,
+        daily_token_budget=settings.llm_daily_token_budget,
+        min_tokens_per_run=settings.llm_min_tokens_per_run,
+    ),
+)
+
+
+def provider_for_run(ip: str) -> tuple[ModelProvider, str | None]:
+    """Decide qué modelo atiende esta petición y, si es el demo por un límite, por qué."""
+    if real_provider is None:
+        return demo_provider, None
+    if not limits.can_start_run():
+        return demo_provider, "Hoy se ha agotado el presupuesto de IA real de Rumbo: respondo en modo demo."
+    if not limits.take_ip_quota(ip):
+        return demo_provider, (
+            f"Has usado tus consultas con IA real ({limits.config.llm_per_hour} por hora, "
+            f"{limits.config.llm_per_day} al día): respondo en modo demo."
+        )
+    return GuardedProvider(real_provider, demo_provider, limits), None
 
 
 def trip_to_dict(t: Trip) -> dict:
@@ -152,10 +194,33 @@ def rag_search(
     }
 
 
-@app.post("/api/chat")
-def chat(req: ChatRequest) -> StreamingResponse:
+@app.get("/api/usage")
+def usage(request: Request) -> dict:
+    """Modo con el que se responderá a quien pregunta y cuántas consultas con IA real le quedan."""
+    ip = client_ip(request.headers, request.client.host if request.client else None)
+    if real_provider is None:
+        return {"mode": "demo", "model": demo_provider.model, "real_ai": False}
+    mine = limits.ip_remaining(ip)
+    return {
+        "mode": real_provider.name,
+        "model": real_provider.model,
+        "real_ai": limits.can_start_run() and min(mine.values()) > 0,
+        "remaining": mine,
+        **limits.status(),
+    }
+
+
+@app.post("/api/chat", response_model=None)
+def chat(req: ChatRequest, request: Request) -> StreamingResponse | JSONResponse:
+    ip = client_ip(request.headers, request.client.host if request.client else None)
+    if not limits.allow_request(ip):
+        return JSONResponse(
+            {"detail": "Demasiadas peticiones seguidas. Espera un minuto."}, status_code=429, headers={"Retry-After": "60"}
+        )
     session_id = req.session_id or str(uuid.uuid4())
     lock = sessions.lock(session_id)
+    run_provider, notice = provider_for_run(ip)
+    agent = Agent(run_provider, max_iterations=settings.agent_max_iterations)
 
     def stream() -> Iterator[str]:
         if not lock.acquire(blocking=False):
@@ -171,10 +236,12 @@ def chat(req: ChatRequest) -> StreamingResponse:
                     "type": "run_started",
                     "run_id": run_id,
                     "session_id": session_id,
-                    "mode": provider.name,
-                    "model": provider.model,
+                    "mode": run_provider.name,
+                    "model": run_provider.model,
                 }
             )
+            if notice:
+                yield _sse({"type": "notice", "text": notice})
             for event in agent.run(history, req.message, ctx, stats):
                 yield _sse(event)
                 if event["type"] == "tool_result" and event["name"] == "save_trip" and not event["is_error"]:
@@ -203,8 +270,8 @@ def chat(req: ChatRequest) -> StreamingResponse:
                         id=run_id,
                         session_id=session_id,
                         prompt=req.message,
-                        mode=provider.name,
-                        model=provider.model,
+                        mode=run_provider.name,
+                        model=run_provider.model,
                         status=stats.status,
                         iterations=stats.iterations,
                         tool_calls=stats.tool_calls,
