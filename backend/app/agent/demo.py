@@ -55,6 +55,31 @@ PLANNING = re.compile(
 )
 
 
+# Señales de que el mensaje va de viajes (o es un ajuste del viaje en curso: "más barato", "mejor 2 días").
+TRAVEL = re.compile(
+    r"\b(viaj\w*|destino\w*|vacacion\w*|escapada|turis\w*|visitar|conocer|ir a|plan\w*|itinerario|ruta|"
+    r"dias?|noches?|semana|finde|personas?|pareja|amigos|familia|viajeros?|presupuesto|barat\w*|economic\w*|"
+    r"lujo|mochilero|confort|caro|precio|clima|tiempo|playa|montana|museos?|templos?|gastronomia|comer|comida|"
+    r"historia|arte|naturaleza|aventura|fotografia|compras|tapas|fiesta|otro|cambia\w*|anade|quita\w*|mas|menos|"
+    r"sorprendeme|si|vale|ok)\b"
+)
+OFF_TOPIC_REPLY = (
+    "Solo puedo ayudarte con viajes: planificar una escapada o resolver dudas prácticas como visados, "
+    'transporte o propinas. Prueba, por ejemplo, con "4 días en Lisboa en junio".'
+)
+
+
+def is_travel_related(text: str) -> bool:
+    t = _norm(text)
+    return bool(
+        PRACTICAL.search(t)
+        or PLANNING.search(t)
+        or TRAVEL.search(t)
+        or any(w in t for words in ALIASES.values() for w in words)
+        or any(m in t for m in MONTHS)
+    )
+
+
 def _norm(text: str) -> str:
     text = unicodedata.normalize("NFD", text.lower())
     return "".join(c for c in text if unicodedata.category(c) != "Mn")
@@ -144,6 +169,10 @@ class DemoProvider:
 
         if not req.destination_id and "search_destinations" in done:
             req.destination_id = done["search_destinations"]["results"][0]["destination_id"]
+
+        # Guardarraíl de alcance: igual que el modelo real, el demo no responde a otros temas.
+        if not is_travel_related(user_texts[-1]):
+            return self._with_input(self._turn([Block(type="text", text=OFF_TOPIC_REPLY)], "end_turn"), messages)
 
         last = _norm(user_texts[-1])
         practical = bool(PRACTICAL.search(last))
