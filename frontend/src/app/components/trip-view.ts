@@ -104,7 +104,7 @@ const BUDGET_LABELS: Record<string, string> = {
         <div class="orb"></div>
         <h1>Planifica un viaje con un agente de IA</h1>
         <p>
-          Rumbo razona, elige herramientas (destinos, clima, presupuesto, itinerario) y guarda el resultado. Pídeselo en el chat y
+          Rumbo razona, elige herramientas (destinos, clima, presupuesto, itinerario y guías prácticas con RAG) y guarda el resultado. Pídeselo en el chat y
           observa la traza en la derecha.
         </p>
       </section>

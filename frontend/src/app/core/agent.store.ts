@@ -1,13 +1,14 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { ApiService } from './api.service';
-import { AgentEvent, ChatMessage, GlobalStats, Health, RunStats, TraceStep, Trip } from './models';
+import { AgentEvent, ChatMessage, GlobalStats, Health, RagSearch, RunStats, TraceStep, Trip } from './models';
 
 export const TOOL_LABELS: Record<string, string> = {
   search_destinations: 'Buscar destinos',
   get_climate: 'Consultar clima',
   estimate_budget: 'Calcular presupuesto',
   build_itinerary: 'Crear itinerario',
+  search_travel_guides: 'Buscar en las guías (RAG)',
   save_trip: 'Guardar viaje',
 };
 
@@ -119,7 +120,15 @@ export class AgentStore {
       case 'tool_result':
         this.trace.update((steps) =>
           steps.map((s) =>
-            s.id === event.id ? { ...s, output: event.output, status: event.is_error ? 'error' : 'ok', duration_ms: event.duration_ms } : s,
+            s.id === event.id
+              ? {
+                  ...s,
+                  output: event.output,
+                  status: event.is_error ? 'error' : 'ok',
+                  duration_ms: event.duration_ms,
+                  rag: event.name === 'search_travel_guides' && !event.is_error ? (event.output as RagSearch) : undefined,
+                }
+              : s,
           ),
         );
         break;

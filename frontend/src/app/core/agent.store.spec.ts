@@ -48,6 +48,34 @@ describe('AgentStore', () => {
     expect(store.running()).toBe(false);
   });
 
+  it('guarda las fuentes del RAG en el paso de la herramienta', () => {
+    store.send('¿Necesito visado para Japón?');
+    const rag = {
+      query: '¿Necesito visado para Japón?',
+      destination_id: 'kioto',
+      retrieval: 'hybrid',
+      expanded_terms: [],
+      timings_ms: { bm25: 0.2, vector: 0.4 },
+      results: [
+        {
+          source: 'guides/kioto.md',
+          destination_id: 'kioto',
+          destination: 'Kioto',
+          section: 'Documentación y entrada',
+          text: 'Sin visado hasta 90 días.',
+          score: 0.12,
+          match: { bm25_rank: 1, vector_rank: 1, vector_similarity: 0.3 },
+        },
+      ],
+    };
+    events.next({ type: 'tool_call', id: 'g1', name: 'search_travel_guides', input: { query: rag.query } });
+    events.next({ type: 'tool_result', id: 'g1', name: 'search_travel_guides', output: rag, is_error: false, duration_ms: 2 });
+
+    const step = store.trace().find((s) => s.id === 'g1');
+    expect(step?.title).toBe('Buscar en las guías (RAG)');
+    expect(step?.rag?.results[0].section).toBe('Documentación y entrada');
+  });
+
   it('ignora mensajes vacíos', () => {
     store.send('   ');
     expect(store.messages()).toEqual([]);
