@@ -29,8 +29,18 @@ import { AgentStore } from './core/agent.store';
       }
 
       @if (store.health(); as h) {
-        <span class="mode" [class.demo]="store.isDemo()">
-          <i></i>{{ store.isDemo() ? 'Modo demo' : 'Claude' }} · {{ h.model }}
+        @let u = store.usage();
+        <span class="mode" [class.demo]="store.isDemo()" [title]="modeHint()">
+          @if (!store.isDemo()) {
+            <i></i>IA real · {{ store.modelLabel() }}
+            @if (u?.remaining; as r) {
+              · te quedan {{ r.hour }}
+            }
+          } @else if (u && u.mode !== 'demo') {
+            <i></i>Modo demo · cupo de IA real agotado
+          } @else {
+            <i></i>Modo demo · {{ h.model }}
+          }
         </span>
       } @else {
         <span class="mode off"><i></i>Backend desconectado</span>
@@ -46,6 +56,12 @@ import { AgentStore } from './core/agent.store';
 })
 export class App implements OnInit {
   protected readonly store = inject(AgentStore);
+
+  protected modeHint(): string {
+    const u = this.store.usage();
+    if (!u || u.mode === 'demo') return 'Sin modelo configurado: el agente funciona con reglas, sin coste.';
+    return `Modelo gratuito con límites: ${u.remaining?.hour ?? 0} consultas esta hora y ${u.remaining?.day ?? 0} hoy. Después, modo demo.`;
+  }
 
   ngOnInit(): void {
     this.store.init();

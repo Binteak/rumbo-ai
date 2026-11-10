@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { ApiService } from './api.service';
-import { AgentEvent, ChatMessage, GlobalStats, Health, RagSearch, RunStats, TraceStep, Trip } from './models';
+import { AgentEvent, ChatMessage, GlobalStats, Health, RagSearch, RunStats, TraceStep, Trip, Usage } from './models';
 
 export const TOOL_LABELS: Record<string, string> = {
   search_destinations: 'Buscar destinos',
@@ -19,6 +19,7 @@ export class AgentStore {
   private sub?: Subscription;
 
   readonly health = signal<Health | null>(null);
+  readonly usage = signal<Usage | null>(null);
   readonly messages = signal<ChatMessage[]>([]);
   readonly trace = signal<TraceStep[]>([]);
   readonly running = signal(false);
@@ -29,7 +30,13 @@ export class AgentStore {
   readonly stats = signal<GlobalStats | null>(null);
   readonly sessionId = signal<string | null>(null);
 
-  readonly isDemo = computed(() => this.health()?.mode === 'demo');
+  /** True si la próxima respuesta será del modo demo (sin modelo configurado o con el cupo agotado). */
+  readonly isDemo = computed(() => {
+    const u = this.usage();
+    return u ? !u.real_ai : this.health()?.mode === 'demo';
+  });
+  /** "openai/gpt-oss-120b" → "gpt-oss-120b". */
+  readonly modelLabel = computed(() => (this.usage()?.model ?? this.health()?.model ?? '').split('/').pop() ?? '');
   readonly toolSteps = computed(() => this.trace().filter((s) => s.kind === 'tool'));
 
   init(): void {
@@ -43,6 +50,7 @@ export class AgentStore {
       if (!this.selectedTrip() && t.length) this.selectedTrip.set(t[0]);
     });
     this.api.stats().subscribe((s) => this.stats.set(s));
+    this.api.usage().subscribe({ next: (u) => this.usage.set(u), error: () => this.usage.set(null) });
   }
 
   send(text: string): void {
@@ -131,6 +139,11 @@ export class AgentStore {
               : s,
           ),
         );
+        break;
+      case 'notice':
+        this.finishThinking();
+        this.pushStep({ id: crypto.randomUUID(), kind: 'notice', title: event.text, status: 'ok' });
+        this.messages.update((m) => [...m, { role: 'notice', text: event.text }]);
         break;
       case 'trip':
         this.selectedTrip.set(event.trip);

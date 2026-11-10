@@ -19,6 +19,7 @@ describe('AgentStore', () => {
             trips: () => of([]),
             stats: () => of(null),
             health: () => of({ status: 'ok', mode: 'demo', model: 'rumbo-demo' }),
+            usage: () => of({ mode: 'groq', model: 'openai/gpt-oss-120b', real_ai: true, remaining: { hour: 5, day: 15 } }),
           },
         },
       ],
@@ -74,6 +75,17 @@ describe('AgentStore', () => {
     const step = store.trace().find((s) => s.id === 'g1');
     expect(step?.title).toBe('Buscar en las guías (RAG)');
     expect(step?.rag?.results[0].section).toBe('Documentación y entrada');
+  });
+
+  it('muestra el aviso de paso al modo demo en el chat y en la traza', () => {
+    store.init();
+    expect(store.isDemo()).toBe(false);
+    expect(store.modelLabel()).toBe('gpt-oss-120b');
+
+    store.send('hola');
+    events.next({ type: 'notice', text: 'Has usado tus consultas con IA real: respondo en modo demo.' });
+    expect(store.messages().map((m) => m.role)).toEqual(['user', 'notice']);
+    expect(store.trace().some((s) => s.kind === 'notice')).toBe(true);
   });
 
   it('ignora mensajes vacíos', () => {
