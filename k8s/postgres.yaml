@@ -13,7 +13,8 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          # PostgreSQL 16 con pgvector: guarda los embeddings del RAG.
+          image: pgvector/pgvector:pg16
           ports:
             - containerPort: 5432
           env:
