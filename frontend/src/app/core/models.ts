@@ -89,6 +89,26 @@ export interface ChatMessage {
   text: string;
 }
 
+/** Fragmento recuperado por el RAG (salida de search_travel_guides). */
+export interface RagHit {
+  source: string;
+  destination_id: string;
+  destination: string;
+  section: string;
+  text: string;
+  score: number;
+  match: { bm25_rank: number | null; vector_rank: number | null; vector_similarity: number | null };
+}
+
+export interface RagSearch {
+  query: string;
+  destination_id: string | null;
+  retrieval: 'hybrid' | 'bm25';
+  expanded_terms: string[];
+  timings_ms: Record<string, number>;
+  results: RagHit[];
+}
+
 /** Paso visible en la traza del agente. */
 export interface TraceStep {
   id: string;
@@ -99,4 +119,6 @@ export interface TraceStep {
   output?: unknown;
   status: 'running' | 'ok' | 'error';
   duration_ms?: number;
+  /** Solo en search_travel_guides: fuentes recuperadas por el RAG. */
+  rag?: RagSearch;
 }

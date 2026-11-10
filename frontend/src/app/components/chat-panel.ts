@@ -69,6 +69,7 @@ export class ChatPanel {
     'Sorpréndeme: un fin de semana barato con playa en mayo',
     'Una semana en Islandia en febrero para ver auroras, 2 personas',
     '4 días en Ciudad de México en noviembre, comida y arte, estilo lujo',
+    '¿Necesito visado para viajar a Japón?',
   ];
 
   constructor() {
