@@ -2,7 +2,7 @@
 
 Agente de IA que planifica viajes completos (destino, clima, presupuesto e itinerario) y responde dudas prácticas con **RAG** sobre guías de cada destino, usando un **loop agéntico escrito a mano** sobre la API de Claude. La interfaz muestra en directo cómo razona el agente: cada herramienta que decide usar, sus argumentos, el resultado y cuánto tarda.
 
-**Angular 22 · TypeScript · Python · FastAPI · Claude API (tool use) · RAG (BM25 + embeddings, pgvector) · PostgreSQL · Redis · Server-Sent Events · Docker · Kubernetes · GitHub Actions**
+**Angular 22 · TypeScript · Python · FastAPI · Claude API y Groq (tool use) · RAG (BM25 + embeddings, pgvector) · PostgreSQL · Redis · Server-Sent Events · Docker · Kubernetes · GitHub Actions**
 
 ![Rumbo](docs/screenshot.png)
 
@@ -13,7 +13,8 @@ Agente de IA que planifica viajes completos (destino, clima, presupuesto e itine
 - **Herramientas tipadas con Pydantic.** Cada herramienta se define una vez con un modelo Pydantic: de ahí sale el JSON Schema que ve el modelo y la validación de lo que devuelve. Si el modelo envía argumentos inválidos, recibe el error y reintenta.
 - **Streaming en tiempo real.** FastAPI emite cada paso del agente como Server-Sent Events y Angular los pinta al instante (fetch + ReadableStream, porque `EventSource` no admite POST).
 - **Observabilidad.** Cada ejecución guarda pasos, llamadas a herramientas, errores, tokens y duración (`/api/stats`). La cabecera muestra la tasa de éxito y el consumo.
-- **Proveedor de modelo intercambiable.** El loop habla con una interfaz `ModelProvider`. Hay dos implementaciones: Claude (`AnthropicProvider`) y un **modo demo** que funciona sin API key ni coste, ideal para enseñar el proyecto.
+- **Proveedor de modelo intercambiable.** El loop habla con una interfaz `ModelProvider`. Hay tres implementaciones: Claude (`AnthropicProvider`), cualquier API compatible con OpenAI como Groq (`OpenAICompatibleProvider`, con un modelo gratuito) y un **modo demo** que funciona sin API key ni coste.
+- **IA real gratis y sin sorpresas.** Límites por IP, presupuesto diario de tokens por debajo de la cuota gratuita y paso automático al modo demo cuando se agotan: nadie puede generar costes ni romper la demo. Detalles en [Modelo gratuito y protección](#modelo-gratuito-y-protección-frente-a-abusos).
 - **Seguridad básica.** El viaje final se recalcula en el servidor en lugar de confiar en datos largos generados por el modelo, la entrada está limitada y la clave de API nunca llega al frontend.
 - **Backend sin estado, listo para escalar.** El historial de cada conversación y su bloqueo viven en Redis, y los datos en PostgreSQL. Cualquier réplica puede atender el siguiente mensaje, así que el backend escala horizontalmente en Kubernetes. Probado con 3 réplicas atendiendo la misma conversación.
 - **Preparado para Kubernetes.** Probes de liveness (`/api/health`) y readiness (`/api/ready`, que comprueba PostgreSQL y Redis), recursos limitados, usuario sin privilegios, autoescalado (HPA), Ingress con streaming y creación de tablas segura con varias réplicas arrancando a la vez (advisory lock de PostgreSQL).
@@ -92,7 +93,7 @@ npm install
 npm start                       # http://localhost:4200
 ```
 
-Sin `ANTHROPIC_API_KEY` en `backend/.env` arranca en **modo demo**. Con la clave, usa Claude (`AGENT_MODEL`, por defecto `claude-sonnet-5-5`).
+Sin claves en `backend/.env` arranca en **modo demo**. Con `ANTHROPIC_API_KEY` usa Claude (`AGENT_MODEL`, por defecto `claude-sonnet-5-5`); con `GROQ_API_KEY`, un modelo gratuito de Groq (`GROQ_MODEL`, por defecto `openai/gpt-oss-120b`).
 
 En local no hace falta nada más: sin `DATABASE_URL` usa SQLite y sin `REDIS_URL` guarda las sesiones en memoria.
 
@@ -149,6 +150,23 @@ kind delete cluster --name rumbo                         # borrar el clúster
 | `kustomization.yaml` | Lo agrupa todo para `kubectl apply -k` |
 
 > ingress-nginx se usa aquí por sencillez para el clúster local. En producción conviene valorar Gateway API u otro controlador mantenido.
+
+## Modelo gratuito y protección frente a abusos
+
+Para que la demo pública use un modelo real **sin coste**, Rumbo puede usar el plan gratuito de [Groq](https://console.groq.com) (sin tarjeta) a través de `OpenAICompatibleProvider`, que también sirve para Gemini u OpenRouter cambiando `GROQ_BASE_URL` y `GROQ_MODEL`. El historial se guarda en un formato neutro, así que el proveedor puede cambiar a mitad de una conversación.
+
+Sin método de pago no hay factura posible; además, la app se protege en tres capas (`backend/app/limits.py`):
+
+| Capa | Qué hace | Por defecto |
+|---|---|---|
+| Anti-flood por IP | Más peticiones por minuto de las permitidas → HTTP 429 | 20 / minuto |
+| Cupo de IA real por IP | Al agotarlo, esa persona sigue usando Rumbo **en modo demo**, con un aviso | 5 / hora, 15 / día |
+| Presupuesto global de tokens | Al agotarlo, todo el mundo pasa al modo demo. Queda por debajo de los 200.000 tokens/día del plan gratuito | 180.000 / día |
+
+- Los tokens servidos desde la caché del proveedor no se descuentan (Groq no los cuenta en sus cuotas).
+- Si el proveedor responde 429 con una espera corta (límite por minuto), el agente espera y reintenta; si la espera es larga, se activa un *cooldown* global y el turno continúa en modo demo sin error (`app/agent/guard.py`).
+- Los contadores van en Redis si hay `REDIS_URL` (compartidos entre réplicas) y en memoria si no.
+- La cabecera muestra "IA real · modelo · te quedan N" o "Modo demo", y `GET /api/usage` devuelve el cupo de quien pregunta.
 
 ## RAG: guías prácticas de cada destino
 
@@ -216,8 +234,10 @@ Los tests del loop usan un proveedor falso con turnos predefinidos, así que no 
 backend/
   app/agent/loop.py        Loop agéntico (generador de eventos)
   app/agent/tools.py       Herramientas + esquemas Pydantic
-  app/agent/providers.py   Interfaz de modelo + Claude
+  app/agent/providers.py   Interfaz de modelo + Claude + APIs compatibles con OpenAI (Groq)
   app/agent/demo.py        Proveedor demo sin API key
+  app/agent/guard.py       Modelo real con presupuesto y paso automático al modo demo
+  app/limits.py            Anti-flood, cupo por IP y presupuesto diario de tokens
   app/main.py              API FastAPI + SSE
   app/db.py                SQLAlchemy 2.0 (viajes y trazas)
   app/sessions.py          Sesiones en memoria o Redis (con bloqueo distribuido)
