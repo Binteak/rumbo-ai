@@ -2,7 +2,8 @@
 # Arranca con:  docker compose up --build   →  http://localhost:8080
 services:
   postgres:
-    image: postgres:16-alpine
+    # PostgreSQL 16 con la extensión pgvector (búsqueda vectorial del RAG).
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: rumbo
       POSTGRES_PASSWORD: rumbo

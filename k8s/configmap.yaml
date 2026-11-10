@@ -7,5 +7,7 @@ data:
   AGENT_MODEL: "claude-sonnet-5-5"
   AGENT_EFFORT: "medium"
   DEMO_DELAY_MS: "600"
+  EMBEDDING_MODEL: "voyage-4-lite"
+  RAG_TOP_K: "4"
   REDIS_URL: "redis://redis:6379/0"
   CORS_ORIGINS: "http://rumbo.localhost"
