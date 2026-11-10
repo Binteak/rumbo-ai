@@ -13,6 +13,7 @@ import time
 import unicodedata
 from dataclasses import dataclass, field
 
+from ..rag.text import tokenize
 from .providers import Block, ModelTurn
 from .tools import MONTHS, destinations
 
@@ -40,6 +41,18 @@ INTEREST_WORDS = {
     "tecnologia": ["tecnolog", "futurista", "gadgets"],
     "compras": ["compras", "shopping", "tiendas"],
 }
+
+
+# Preguntas prácticas que se responden con las guías (RAG) en lugar de planificar un viaje.
+PRACTICAL = re.compile(
+    r"\b(visad\w*|visa|pasaporte|dni|papeleo|documentacion|requisitos|propinas?|moneda|efectivo|cajeros?|"
+    r"tarjetas?|transporte|mover\w*|muevo|metro|taxis?|autobus\w*|aeropuerto|segur[oa]|seguridad|peligros\w*|robos?|"
+    r"timos?|costumbres?|etiqueta|vestir|enchufes?|adaptador|voltaje|wifi|internet|grifo|vacunas?|salud|"
+    r"alojar\w*|dormir|barrios?|consejos?)\b"
+)
+PLANNING = re.compile(
+    r"\b(\d+\s*(dias|noches)|fin de semana|finde|una semana|planifica\w*|organiza\w*|itinerario|escapada|sorprendeme)\b"
+)
 
 
 def _norm(text: str) -> str:
@@ -93,6 +106,14 @@ def parse_request(texts: list[str]) -> Request:
     return req
 
 
+def _best_sentences(text: str, query: str, n: int = 2) -> str:
+    """Las `n` frases del fragmento que más palabras comparten con la pregunta, en su orden original."""
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    wanted = set(tokenize(query))
+    ranked = sorted(range(len(sentences)), key=lambda i: (-len(wanted & set(tokenize(sentences[i]))), i))[:n]
+    return " ".join(sentences[i] for i in sorted(ranked))
+
+
 class DemoProvider:
     name = "demo"
     model = "rumbo-demo"
@@ -123,6 +144,31 @@ class DemoProvider:
 
         if not req.destination_id and "search_destinations" in done:
             req.destination_id = done["search_destinations"]["results"][0]["destination_id"]
+
+        last = _norm(user_texts[-1])
+        practical = bool(PRACTICAL.search(last))
+        plan = bool(PLANNING.search(last)) or not practical
+        # Una sola búsqueda por turno, aunque falle (si no, un error repetiría la llamada en bucle).
+        if practical and "search_travel_guides" not in calls.values() and (req.destination_id or not plan):
+            where = f" de {destinations()[req.destination_id]['name']}" if req.destination_id else ""
+            return self._with_input(
+                self._turn(
+                    [
+                        Block(type="text", text=f"Es una pregunta práctica: la busco en las guías{where} (RAG)."),
+                        Block(
+                            type="tool_use",
+                            id=self._id(),
+                            name="search_travel_guides",
+                            input={"query": user_texts[-1], "destination_id": req.destination_id},
+                        ),
+                    ],
+                    "tool_use",
+                ),
+                messages,
+            )
+        if not plan:
+            text = self._guides_answer(done.get("search_travel_guides"))
+            return self._with_input(self._turn([Block(type="text", text=text)], "end_turn"), messages)
 
         step = self._next_step(req, done)
         if step is None:
@@ -195,8 +241,33 @@ class DemoProvider:
                 f"Presupuesto estimado sin vuelos: {budget['total_eur']} € "
                 f"({budget['total_per_person_eur']} € por persona, estilo {req.style})."
             )
+        guides = done.get("search_travel_guides", {}).get("results") or []
+        if guides:
+            g = guides[0]
+            tip = _best_sentences(g["text"], done["search_travel_guides"]["query"])
+            lines.append(f"Consejo práctico: {tip} (Guía de {g['destination']} · {g['section']}).")
         lines.append("¿Quieres que lo haga más económico, añada días o cambie de destino?")
         return " ".join(lines)
+
+    @staticmethod
+    def _guides_answer(result: dict | None) -> str:
+        """Respuesta extractiva: el modo demo no genera texto, cita el fragmento más relevante."""
+        if result is None:
+            return "Ahora mismo no he podido consultar las guías de viaje. Inténtalo de nuevo en unos minutos."
+        hits = result.get("results") or []
+        if not hits:
+            return (
+                "No tengo información sobre eso en mis guías de viaje, así que prefiero no inventarlo. "
+                "Puedo ayudarte con documentación, dinero y propinas, transporte, seguridad, costumbres, "
+                "enchufes, salud o dónde alojarte en cualquiera de mis 10 destinos."
+            )
+        top = hits[0]
+        lines = [f"Según la guía de {top['destination']} ({top['section']}): {top['text']}"]
+        lines.append(
+            f"Fuente: Guía de {top['destination']} · {top['section']}. "
+            "Es información orientativa: verifica los requisitos oficiales antes de viajar."
+        )
+        return "\n\n".join(lines)
 
     @staticmethod
     def _turn(blocks: list[Block], stop_reason: str) -> ModelTurn:
