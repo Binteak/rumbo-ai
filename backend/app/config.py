@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     agent_mode: str = "auto"
     demo_delay_ms: int = 700
 
+    # RAG: con VOYAGE_API_KEY usa embeddings de Voyage AI; sin ella, un embedder local gratuito.
+    voyage_api_key: str | None = None
+    embedding_model: str = "voyage-4-lite"
+    rag_top_k: int = 4
+
     database_url: str = "sqlite:///./rumbo.db"
     # Con REDIS_URL el historial de sesiones se guarda en Redis (necesario con varias réplicas).
     redis_url: str | None = None
