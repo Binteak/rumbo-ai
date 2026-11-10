@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .providers import Block, ModelProvider
-from .tools import ToolContext, ToolError, execute_tool, pending_trip, tool_schemas
+from .tools import ToolContext, ToolError, execute_tool, model_view, pending_trip, tool_schemas
 
 SYSTEM_PROMPT = """Eres Rumbo, un agente que planifica viajes y resuelve dudas prácticas de viaje.
 Alcance: solo ayudas con viajes (planificar un viaje o resolver dudas prácticas para viajar). Si te
@@ -133,7 +133,8 @@ class Agent:
         except Exception as e:  # noqa: BLE001 - cualquier fallo se le reporta al modelo
             output, is_error = {"error": f"Error inesperado: {type(e).__name__}: {e}"}, True
         stats.tool_errors += is_error
-        content = json.dumps(output, ensure_ascii=False)
+        # El modelo recibe una vista compacta; la traza y la interfaz, el resultado completo.
+        content = json.dumps(output if is_error else model_view(block.name, output), ensure_ascii=False)
         results.append({"type": "tool_result", "tool_use_id": block.id, "content": content, "is_error": is_error})
         yield {
             "type": "tool_result",

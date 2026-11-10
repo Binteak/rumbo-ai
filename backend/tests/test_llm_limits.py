@@ -327,3 +327,56 @@ def test_flood_returns_429(real_ai):
 def test_usage_in_demo_mode():
     with TestClient(main.app) as client:
         assert client.get("/api/usage").json() == {"mode": "demo", "model": "rumbo-demo", "real_ai": False}
+
+
+# --- Gemini --------------------------------------------------------------------------
+
+
+def test_gemini_thought_signatures_are_kept_and_sent_back():
+    seen = []
+    signature = {"google": {"thought_signature": "firma-123"}}
+    call = {**tool_call("get_climate", {"destination_id": "kioto", "month": 4}), "extra_content": signature}
+    p = provider_with(
+        [httpx.Response(200, json=completion(None, [call], "tool_calls")), httpx.Response(200, json=completion("15 °C"))], seen
+    )
+    p.model = "gemini-flash-latest"
+    events = list(Agent(p).run([], "clima en Kioto en abril", ToolContext(), RunStats()))
+    assert events[-1]["text"] == "15 °C"
+    sent_call = next(m for m in seen[1]["messages"] if m.get("tool_calls"))["tool_calls"][0]
+    assert sent_call["extra_content"] == signature and seen[0]["reasoning_effort"] == "low"
+
+
+def test_missing_tool_call_id_gets_generated():
+    call = {"type": "function", "function": {"name": "get_climate", "arguments": "{}"}}
+    turn = OpenAICompatibleProvider._parse(completion(None, [call], "tool_calls"))
+    assert turn.blocks[0].id.startswith("call_") and turn.history_content[0]["id"] == turn.blocks[0].id
+
+
+def test_gemini_key_selects_gemini():
+    from app.config import Settings
+
+    s = Settings(_env_file=None, agent_mode="auto", gemini_api_key="g", groq_api_key="q", anthropic_api_key=None)
+    assert s.llm_provider == "gemini"
+    assert (
+        Settings(_env_file=None, agent_mode="auto", groq_api_key="q", anthropic_api_key=None, gemini_api_key=None).llm_provider
+        == "groq"
+    )
+    assert Settings(_env_file=None, gemini_api_key="g", agent_mode="demo", anthropic_api_key=None).llm_provider == "demo"
+
+
+def test_model_receives_compact_tool_results():
+    seen = []
+    p = provider_with(
+        [
+            httpx.Response(
+                200, json=completion(None, [tool_call("build_itinerary", {"destination_id": "kioto", "days": 3})], "tool_calls")
+            ),
+            httpx.Response(200, json=completion("Listo.")),
+        ],
+        seen,
+    )
+    events = list(Agent(p).run([], "3 días en Kioto", ToolContext(), RunStats()))
+    sent = json.loads(seen[1]["messages"][-1]["content"])
+    assert set(sent) == {"destination", "days"} and isinstance(sent["days"][0]["plan"][0], str)
+    full = next(e for e in events if e["type"] == "tool_result")["output"]
+    assert "activities" in full["days"][0]  # la interfaz sigue recibiendo el detalle completo

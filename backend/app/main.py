@@ -62,6 +62,14 @@ def build_real_provider() -> ModelProvider | None:
     """Modelo real configurado (Claude o uno gratuito compatible con OpenAI), o None para el modo demo."""
     if settings.llm_provider == "claude":
         return AnthropicProvider(settings.anthropic_api_key, settings.agent_model, settings.agent_effort)
+    if settings.llm_provider == "gemini":
+        return OpenAICompatibleProvider(
+            settings.gemini_api_key,
+            settings.gemini_model,
+            settings.gemini_base_url,
+            name="gemini",
+            max_tokens=settings.llm_max_output_tokens,
+        )
     if settings.llm_provider == "groq":
         return OpenAICompatibleProvider(
             settings.groq_api_key, settings.groq_model, settings.groq_base_url, max_tokens=settings.llm_max_output_tokens

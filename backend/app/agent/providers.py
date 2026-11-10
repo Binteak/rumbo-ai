@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -147,15 +148,19 @@ def to_openai_messages(system: str, messages: list[dict]) -> list[dict]:
         # Asistente: el texto va en `content` y las herramientas en `tool_calls` (los bloques de
         # razonamiento de Claude no tienen equivalente y se omiten).
         text = "\n".join(b["text"] for b in content if b.get("type") == "text" and b.get("text"))
-        calls = [
-            {
+        calls = []
+        for b in content:
+            if b.get("type") != "tool_use":
+                continue
+            call = {
                 "id": b["id"],
                 "type": "function",
                 "function": {"name": b["name"], "arguments": json.dumps(b.get("input", {}), ensure_ascii=False)},
             }
-            for b in content
-            if b.get("type") == "tool_use"
-        ]
+            # Gemini 3 exige reenviar la "thought signature" que acompañaba a la llamada.
+            if b.get("extra_content"):
+                call["extra_content"] = b["extra_content"]
+            calls.append(call)
         msg: dict[str, Any] = {"role": "assistant", "content": text or None}
         if calls:
             msg["tool_calls"] = calls
@@ -206,7 +211,7 @@ class OpenAICompatibleProvider:
             "max_tokens": self.max_tokens,
             "temperature": 0.3,
         }
-        if self.model.startswith("openai/gpt-oss"):
+        if self.model.startswith(("openai/gpt-oss", "gemini")):
             payload["reasoning_effort"] = "low"  # menos tokens de razonamiento: cuidan la cuota gratuita
         return payload
 
@@ -229,27 +234,34 @@ class OpenAICompatibleProvider:
         choice = data["choices"][0]
         msg = choice["message"]
         blocks: list[Block] = []
+        extras: dict[str, dict] = {}
         if msg.get("content"):
             blocks.append(Block(type="text", text=msg["content"]))
         for call in msg.get("tool_calls") or []:
+            call_id = call.get("id") or f"call_{uuid.uuid4().hex[:12]}"
+            if call.get("extra_content"):
+                extras[call_id] = call["extra_content"]
             raw = call["function"].get("arguments") or "{}"
             try:
                 args = json.loads(raw)
             except json.JSONDecodeError:
                 args = {"_argumentos_no_validos": raw}  # la validación Pydantic devolverá el error al modelo
             blocks.append(
-                Block(type="tool_use", id=call["id"], name=call["function"]["name"], input=args if isinstance(args, dict) else {})
+                Block(type="tool_use", id=call_id, name=call["function"]["name"], input=args if isinstance(args, dict) else {})
             )
         if any(b.type == "tool_use" for b in blocks):
             stop = "tool_use"
         else:
             stop = {"length": "max_tokens", "content_filter": "refusal"}.get(choice.get("finish_reason"), "end_turn")
-        history = [
-            {"type": "text", "text": b.text}
-            if b.type == "text"
-            else {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
-            for b in blocks
-        ]
+        history: list[dict] = []
+        for b in blocks:
+            if b.type == "text":
+                history.append({"type": "text", "text": b.text})
+            else:
+                entry = {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
+                if b.id in extras:
+                    entry["extra_content"] = extras[b.id]
+                history.append(entry)
         usage = data.get("usage") or {}
         return ModelTurn(
             stop_reason=stop,
