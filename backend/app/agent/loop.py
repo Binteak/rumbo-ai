@@ -17,8 +17,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
-from .providers import ModelProvider
-from .tools import ToolContext, ToolError, execute_tool, tool_schemas
+from .providers import Block, ModelProvider
+from .tools import ToolContext, ToolError, execute_tool, pending_trip, tool_schemas
 
 SYSTEM_PROMPT = """Eres Rumbo, un agente que planifica viajes y resuelve dudas prácticas de viaje.
 Para planificar un viaje, trabaja con herramientas en este orden lógico:
@@ -26,7 +26,7 @@ Para planificar un viaje, trabaja con herramientas en este orden lógico:
 2. Si conoces el mes, consulta get_climate.
 3. Calcula el presupuesto con estimate_budget.
 4. Genera el plan con build_itinerary.
-5. Guarda el resultado con save_trip, una sola vez.
+5. Termina SIEMPRE con save_trip, una sola vez y sin preguntar: es lo que muestra el viaje en el panel.
 Si te faltan datos, asume valores razonables (4 días, 1 viajero, estilo confort) y dilo.
 Para preguntas prácticas (visados y documentación, dinero y propinas, transporte, seguridad,
 costumbres, enchufes, salud, dónde alojarse) usa search_travel_guides y responde solo con lo que
@@ -34,7 +34,9 @@ devuelva, citando la fuente como (Guía de <destino> · <sección>). Si las guí
 no inventes requisitos de entrada. Si el usuario solo pregunta algo práctico, no hace falta planificar
 ni guardar un viaje.
 Si una herramienta devuelve un error, léelo y corrige los argumentos.
-Responde en el idioma del usuario, con un resumen breve y concreto al final."""
+Responde en el idioma del usuario. La interfaz ya muestra el itinerario, el presupuesto y el clima en
+un panel: en la respuesta final no repitas el itinerario día a día ni uses tablas ni Markdown; escribe
+de 2 a 4 frases en texto plano con lo esencial."""
 
 Event = dict[str, Any]
 
@@ -92,6 +94,13 @@ class Agent:
                     final = final or "El modelo no ha podido completar esta petición."
                 elif turn.stop_reason == "max_tokens":
                     final += "\n[Respuesta cortada por longitud]"
+                if args := pending_trip(ctx):
+                    yield {
+                        "type": "narration",
+                        "text": "El modelo no ha guardado el viaje: lo guarda el servidor con el plan calculado.",
+                    }
+                    auto = Block(type="tool_use", id="auto_save_trip", name="save_trip", input=args)
+                    yield from self._run_tool(auto, ctx, stats, [])
                 stats.status = "completed"
                 stats.final_text = final
                 history[:] = messages
