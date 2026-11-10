@@ -5,7 +5,14 @@ from app.agent.tools import ToolContext, ToolError, execute_tool, tool_schemas
 
 def test_schemas_are_generated_from_pydantic():
     names = {s["name"] for s in tool_schemas()}
-    assert names == {"search_destinations", "get_climate", "estimate_budget", "build_itinerary", "save_trip"}
+    assert names == {
+        "search_destinations",
+        "get_climate",
+        "estimate_budget",
+        "build_itinerary",
+        "search_travel_guides",
+        "save_trip",
+    }
     climate = next(s for s in tool_schemas() if s["name"] == "get_climate")
     assert climate["input_schema"]["required"] == ["destination_id", "month"]
 
