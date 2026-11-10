@@ -274,6 +274,36 @@ class ToolContext:
 
     save_trip: Callable[[dict], dict] | None = None
     saved: list[dict] = field(default_factory=list)
+    # Herramientas ejecutadas con éxito en este turno y sus argumentos ya validados.
+    calls: list[tuple[str, dict]] = field(default_factory=list)
+
+
+def pending_trip(ctx: ToolContext) -> dict | None:
+    """Argumentos de save_trip si el agente generó un itinerario pero no lo guardó.
+
+    Los modelos pequeños a veces terminan el turno sin la última llamada. El servidor no depende
+    de ello: reconstruye el viaje con los argumentos de las herramientas que sí se ejecutaron.
+    """
+    if ctx.saved or ctx.save_trip is None:
+        return None
+    itinerary = next((a for n, a in reversed(ctx.calls) if n == "build_itinerary"), None)
+    if itinerary is None:
+        return None
+    dest_id = itinerary["destination_id"]
+    budget = next((a for n, a in reversed(ctx.calls) if n == "estimate_budget" and a["destination_id"] == dest_id), {})
+    climate = next((a for n, a in reversed(ctx.calls) if n == "get_climate" and a["destination_id"] == dest_id), {})
+    dest = _get_destination(dest_id)
+    travelers, style, month = budget.get("travelers", 1), budget.get("style", "confort"), climate.get("month")
+    return {
+        "title": f"{itinerary['days']} días en {dest['name']}" + (f" en {MONTHS[month - 1]}" if month else ""),
+        "destination_id": dest_id,
+        "days": itinerary["days"],
+        "travelers": travelers,
+        "style": style,
+        "month": month,
+        "interests": itinerary.get("interests", []),
+        "summary": f"{dest['description']} Plan {style} para {travelers} viajero(s).",
+    }
 
 
 def save_trip(args: SaveTripArgs, ctx: ToolContext) -> dict:
@@ -364,6 +394,7 @@ def execute_tool(name: str, raw_args: dict[str, Any], ctx: ToolContext | None = 
     except ValidationError as e:
         problems = "; ".join(f"{'.'.join(map(str, err['loc']))}: {err['msg']}" for err in e.errors())
         raise ToolError(f"Argumentos no válidos para {name}: {problems}") from None
-    if tool.needs_context:
-        return tool.handler(args, ctx or ToolContext())
-    return tool.handler(args)
+    output = tool.handler(args, ctx or ToolContext()) if tool.needs_context else tool.handler(args)
+    if ctx is not None:
+        ctx.calls.append((name, args.model_dump()))
+    return output

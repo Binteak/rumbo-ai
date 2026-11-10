@@ -86,3 +86,28 @@ def test_demo_agent_completes_full_plan():
     tools = [e["name"] for e in events if e["type"] == "tool_call"]
     assert tools == ["search_destinations", "get_climate", "estimate_budget", "build_itinerary", "save_trip"]
     assert stats.status == "completed" and saved and saved[0]["style"] == "mochilero"
+
+
+def test_server_saves_the_trip_when_the_model_forgets():
+    provider = ScriptedProvider(
+        [
+            tool_turn("estimate_budget", {"destination_id": "kioto", "days": 5, "travelers": 2, "style": "confort"}),
+            tool_turn("get_climate", {"destination_id": "kioto", "month": 4}, "t2"),
+            tool_turn("build_itinerary", {"destination_id": "kioto", "days": 5, "interests": ["historia"]}, "t3"),
+            end_turn("Aquí tienes tu plan."),  # termina sin llamar a save_trip
+        ]
+    )
+    saved = []
+    ctx = ToolContext(save_trip=lambda d: saved.append(d) or {**d, "id": 3})
+    events, stats = run(Agent(provider), [], "5 días en Kioto en abril", ctx)
+    auto = [e for e in events if e["type"] == "tool_call" and e["id"] == "auto_save_trip"]
+    assert auto and auto[0]["input"]["title"] == "5 días en Kioto en abril"
+    assert saved[0]["travelers"] == 2 and len(saved[0]["itinerary"]) == 5 and saved[0]["climate"]["month"] == "abril"
+    assert events[-1]["type"] == "final" and stats.status == "completed"
+
+
+def test_no_auto_save_for_practical_questions():
+    provider = ScriptedProvider([tool_turn("search_travel_guides", {"query": "visado Japón"}), end_turn("Sin visado.")])
+    saved = []
+    events, _ = run(Agent(provider), [], "¿visado?", ToolContext(save_trip=lambda d: saved.append(d) or {**d, "id": 1}))
+    assert saved == [] and not any(e.get("id") == "auto_save_trip" for e in events)
