@@ -281,6 +281,8 @@ def test_cooldown_blocks_real_ai(limits):
 def test_client_ip_uses_last_forwarded_entry():
     assert client_ip({"x-forwarded-for": "6.6.6.6, 9.9.9.9"}, "10.0.0.1") == "9.9.9.9"
     assert client_ip({}, "10.0.0.1") == "10.0.0.1"
+    # Detrás de Cloudflare (Render), CF-Connecting-IP manda.
+    assert client_ip({"cf-connecting-ip": "5.5.5.5", "x-forwarded-for": "5.5.5.5, 172.68.1.1"}, "10.0.0.1") == "5.5.5.5"
 
 
 # --- API con modelo real simulado ----------------------------------------------------

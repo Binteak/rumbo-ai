@@ -163,8 +163,17 @@ def build_limits(redis_url: str | None, config: LimitsConfig) -> UsageLimits:
 
 
 def client_ip(headers, peer: str | None) -> str:
-    """IP del cliente. Detrás de un proxy (Render, nginx, Ingress) se usa la última entrada de
-    X-Forwarded-For, que es la que añade el proxy de confianza; las anteriores las puede inventar el cliente."""
+    """IP del cliente.
+
+    - Detrás de Cloudflare (Render lo usa), la cabecera CF-Connecting-IP trae la IP real del visitante.
+    - Detrás de un proxy propio (nginx, Ingress), la última entrada de X-Forwarded-For es la que añade
+      el proxy de confianza; las anteriores las puede inventar el cliente.
+
+    Si alguien falseara la cabecera para saltarse el cupo por IP, el presupuesto diario global sigue
+    limitando el gasto total."""
+    for header in ("cf-connecting-ip", "true-client-ip"):
+        if value := headers.get(header):
+            return value.strip()
     forwarded = headers.get("x-forwarded-for")
     if forwarded:
         return forwarded.split(",")[-1].strip() or (peer or "desconocida")
