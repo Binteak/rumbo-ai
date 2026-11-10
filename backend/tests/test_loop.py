@@ -1,3 +1,5 @@
+import pytest
+
 from app.agent import Agent, RunStats, ToolContext
 from app.agent.demo import DemoProvider, parse_request
 from app.agent.providers import Block, ModelTurn
@@ -111,3 +113,24 @@ def test_no_auto_save_for_practical_questions():
     saved = []
     events, _ = run(Agent(provider), [], "¿visado?", ToolContext(save_trip=lambda d: saved.append(d) or {**d, "id": 1}))
     assert saved == [] and not any(e.get("id") == "auto_save_trip" for e in events)
+
+
+@pytest.mark.parametrize("question", ["¿Quién juega hoy al fútbol?", "¿Qué es mejor, el Barça o el Madrid?", "Escribe un poema"])
+def test_demo_refuses_off_topic_questions(question):
+    events, stats = run(Agent(DemoProvider()), [], question)
+    assert not [e for e in events if e["type"] == "tool_call"]
+    assert "Solo puedo ayudarte con viajes" in events[-1]["text"] and stats.status == "completed"
+
+
+def test_demo_still_handles_follow_ups_after_a_plan():
+    agent, history = Agent(DemoProvider()), []
+    ctx = ToolContext(save_trip=lambda d: {**d, "id": 1})
+    run(agent, history, "3 días en Lisboa en mayo", ctx)
+    events, _ = run(agent, history, "sí, hazlo más económico", ctx)
+    assert "save_trip" in [e["name"] for e in events if e["type"] == "tool_call"]
+
+
+def test_system_prompt_limits_scope_to_travel():
+    from app.agent.loop import SYSTEM_PROMPT
+
+    assert "solo ayudas con viajes" in SYSTEM_PROMPT and "no la respondas" in SYSTEM_PROMPT
