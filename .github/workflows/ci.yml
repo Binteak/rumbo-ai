@@ -11,6 +11,21 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # PostgreSQL con pgvector para probar el almacén de vectores real del RAG.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: rumbo
+          POSTGRES_PASSWORD: rumbo
+          POSTGRES_DB: rumbo
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U rumbo -d rumbo"
+          --health-interval 5s
+          --health-retries 10
+    env:
+      TEST_PG_URL: postgresql+psycopg://rumbo:rumbo@localhost:5432/rumbo
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -20,6 +35,8 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: ruff check . && ruff format --check .
       - run: pytest
+      - name: Evals de recuperación del RAG (falla si recall@4 < 0.9)
+        run: python -m evals.rag_eval --min-recall 0.9
 
   frontend:
     runs-on: ubuntu-latest

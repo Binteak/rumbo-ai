@@ -1,0 +1,36 @@
+{"q": "¿Puedo viajar a Portugal solo con el DNI?", "destination_id": "lisboa", "expected": "lisboa#documentacion-y-entrada"}
+{"q": "¿Qué es eso del couvert que cobran en los restaurantes?", "destination_id": "lisboa", "expected": "lisboa#dinero-y-propinas"}
+{"q": "¿Cómo llego a Sintra?", "destination_id": "lisboa", "expected": "lisboa#como-moverse"}
+{"q": "¿Hay carteristas en el tranvía?", "destination_id": "lisboa", "expected": "lisboa#seguridad"}
+{"q": "¿Necesito visado para ir a Japón?", "destination_id": "kioto", "expected": "kioto#documentacion-y-entrada"}
+{"q": "¿Se deja propina en los restaurantes japoneses?", "destination_id": "kioto", "expected": "kioto#dinero-y-propinas"}
+{"q": "¿Cómo me muevo por Kioto si los autobuses van llenos?", "destination_id": "kioto", "expected": "kioto#como-moverse"}
+{"q": "¿Puedo hacer fotos a las geishas en Gion?", "destination_id": "kioto", "expected": "kioto#costumbres-y-etiqueta"}
+{"q": "¿Qué adaptador necesito para cargar el móvil en Japón?", "destination_id": "kioto", "expected": "kioto#enchufes-y-conectividad"}
+{"q": "¿Cuándo es mejor ir para ver los cerezos en flor?", "destination_id": "kioto", "expected": "kioto#temporadas-y-multitudes"}
+{"q": "¿Hace falta llevar coronas islandesas en efectivo?", "destination_id": "reikiavik", "expected": "reikiavik#dinero-y-propinas"}
+{"q": "¿Cuándo se ven las auroras boreales?", "destination_id": "reikiavik", "expected": "reikiavik#auroras-boreales"}
+{"q": "¿Es peligrosa la playa de Reynisfjara?", "destination_id": "reikiavik", "expected": "reikiavik#seguridad"}
+{"q": "¿Qué normas hay en las piscinas geotermales?", "destination_id": "reikiavik", "expected": "reikiavik#costumbres-y-etiqueta"}
+{"q": "¿Puedo beber agua del grifo en México?", "destination_id": "cdmx", "expected": "cdmx#salud-y-agua"}
+{"q": "¿Afecta la altitud de la ciudad?", "destination_id": "cdmx", "expected": "cdmx#salud-y-agua"}
+{"q": "¿Cuánta propina se deja en un restaurante?", "destination_id": "cdmx", "expected": "cdmx#dinero-y-propinas"}
+{"q": "¿Es buena idea parar un taxi en la calle?", "destination_id": "cdmx", "expected": "cdmx#como-moverse"}
+{"q": "¿Me sirve el DNI para entrar en Marruecos?", "destination_id": "marrakech", "expected": "marrakech#documentacion-y-entrada"}
+{"q": "¿Cómo se regatea en los zocos?", "destination_id": "marrakech", "expected": "marrakech#regateo-en-los-zocos"}
+{"q": "¿Cómo debo vestir en la medina?", "destination_id": "marrakech", "expected": "marrakech#costumbres-y-etiqueta"}
+{"q": "¿Se puede pagar con tarjeta en todas partes en Dinamarca?", "destination_id": "copenhague", "expected": "copenhague#dinero-y-propinas"}
+{"q": "¿Cómo voy del aeropuerto al centro?", "destination_id": "copenhague", "expected": "copenhague#como-moverse"}
+{"q": "¿Me hace falta la K-ETA para Corea?", "destination_id": "seul", "expected": "seul#documentacion-y-entrada"}
+{"q": "¿Funciona Google Maps en Seúl?", "destination_id": "seul", "expected": "seul#como-moverse"}
+{"q": "¿Qué zona es mejor para salir de noche y alojarse?", "destination_id": "seul", "expected": "seul#donde-alojarse"}
+{"q": "¿Dónde cambio dinero en Buenos Aires?", "destination_id": "buenosaires", "expected": "buenosaires#dinero-y-propinas"}
+{"q": "¿Es seguro ir a La Boca?", "destination_id": "buenosaires", "expected": "buenosaires#seguridad"}
+{"q": "¿A qué hora se cena en Argentina?", "destination_id": "buenosaires", "expected": "buenosaires#costumbres-y-etiqueta"}
+{"q": "¿Qué requisitos tiene el pasaporte para Sudáfrica?", "destination_id": "ciudaddelcabo", "expected": "ciudaddelcabo#documentacion-y-entrada"}
+{"q": "¿Hay cortes de luz?", "destination_id": "ciudaddelcabo", "expected": "ciudaddelcabo#electricidad-y-conectividad"}
+{"q": "¿Puedo pasear de noche por la ciudad?", "destination_id": "ciudaddelcabo", "expected": "ciudaddelcabo#seguridad"}
+{"q": "¿Qué es la ESTA y cómo la pido?", "destination_id": "nuevayork", "expected": "nuevayork#documentacion-y-entrada"}
+{"q": "¿Cómo se paga el metro ahora que no hay MetroCard?", "destination_id": "nuevayork", "expected": "nuevayork#como-moverse"}
+{"q": "¿Los precios incluyen impuestos?", "destination_id": "nuevayork", "expected": "nuevayork#dinero-y-propinas"}
+{"q": "¿Necesito seguro médico para ir a Nueva York?", "destination_id": "nuevayork", "expected": "nuevayork#salud-y-agua"}
