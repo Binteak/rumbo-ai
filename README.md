@@ -364,3 +364,7 @@ frontend/
 - Migraciones con Alembic ejecutadas como Job de Kubernetes antes de cada despliegue.
 - Trazas con OpenTelemetry (o Langfuse) para analizar latencia, coste y errores por paso en producción.
 - Despliegue automático en Render al fusionar en `main`.
+
+## Licencia
+
+© 2026 Alvaro Ruiz Ramírez. Todos los derechos reservados. Puedes ver el código y ejecutarlo en local para evaluar este trabajo, pero no copiarlo, reutilizarlo ni redistribuirlo sin permiso. Detalles en [LICENSE](LICENSE).

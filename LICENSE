@@ -1,0 +1,46 @@
+Copyright (c) 2026 Alvaro Ruiz Ramírez. Todos los derechos reservados.
+
+Rumbo AI — Licencia propietaria
+
+1. Titularidad
+   Este repositorio, incluidos el código fuente, el diseño, la documentación, los prompts,
+   los datos de destinos y las guías (en conjunto, "el Software"), es obra de
+   Alvaro Ruiz Ramírez, que conserva todos los derechos de propiedad intelectual sobre él.
+
+2. Usos permitidos
+   Sin necesidad de permiso previo, cualquier persona puede:
+   a) ver y leer el código fuente en este repositorio;
+   b) descargarlo y ejecutarlo en local con el único fin de evaluar el trabajo del autor
+      (por ejemplo, en un proceso de selección o una revisión técnica).
+
+3. Usos no permitidos
+   Salvo autorización previa y por escrito del autor, no se permite:
+   a) copiar, reproducir o reutilizar el Software, en todo o en parte, en otros proyectos;
+   b) modificarlo o crear obras derivadas para distribuirlas o publicarlas;
+   c) distribuirlo, sublicenciarlo, venderlo o publicarlo, con o sin cambios;
+   d) usarlo con fines comerciales o desplegarlo como servicio para terceros;
+   e) presentarlo, en todo o en parte, como trabajo propio (por ejemplo, en un portfolio).
+
+4. Componentes de terceros
+   Las dependencias y los recursos de terceros incluidos o referenciados (por ejemplo, los
+   paquetes de npm y de PyPI, country-flag-emoji-polyfill y la fuente de banderas de
+   Twemoji) mantienen sus propias licencias, que prevalecen sobre esta para esos componentes.
+
+5. Sin garantía
+   El Software se ofrece "tal cual", sin garantías de ningún tipo. El autor no se hace
+   responsable de ningún daño derivado de su uso.
+
+Para solicitar permisos, contacta con el autor a través de GitHub (@Binteak).
+
+---------------------------------------------------------------------------------------
+
+English version (the Spanish version prevails in case of discrepancy)
+
+Copyright (c) 2026 Alvaro Ruiz Ramírez. All rights reserved.
+
+You may view the source code in this repository, and download and run it locally solely
+to evaluate the author's work (for example, in a hiring process or technical review).
+Without the author's prior written permission, you may not copy, reuse, modify,
+distribute, sublicense, sell, publish, deploy as a service, use commercially, or present
+as your own any part of this software. Third-party components keep their own licenses.
+The software is provided "as is", without warranty of any kind.
