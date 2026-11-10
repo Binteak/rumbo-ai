@@ -14,12 +14,16 @@ class Settings(BaseSettings):
     agent_model: str = "claude-sonnet-5-5"
     agent_effort: str = "medium"
     agent_max_iterations: int = 12
-    # "auto": usa Claude si hay ANTHROPIC_API_KEY, si no Groq si hay GROQ_API_KEY, y si no el modo demo.
+    # "auto": Claude si hay ANTHROPIC_API_KEY; si no, Gemini (GEMINI_API_KEY); si no, Groq (GROQ_API_KEY);
+    # y si no, el modo demo.
     # "demo" fuerza el modo demo.
     agent_mode: str = "auto"
     demo_delay_ms: int = 700
 
-    # Modelo gratuito: cualquier API compatible con OpenAI. Por defecto, el plan Free de Groq (sin tarjeta).
+    # Modelos gratuitos con APIs compatibles con OpenAI (sin tarjeta): Gemini (Google AI Studio) y Groq.
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-flash-latest"
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
     groq_api_key: str | None = None
     groq_model: str = "openai/gpt-oss-120b"
     groq_base_url: str = "https://api.groq.com/openai/v1"
@@ -45,11 +49,13 @@ class Settings(BaseSettings):
 
     @property
     def llm_provider(self) -> str:
-        """Proveedor real configurado: "claude", "groq" o "demo" si no hay ninguno."""
+        """Proveedor real configurado: "claude", "gemini", "groq" o "demo" si no hay ninguno."""
         if self.agent_mode == "demo":
             return "demo"
         if self.anthropic_api_key:
             return "claude"
+        if self.gemini_api_key:
+            return "gemini"
         if self.groq_api_key:
             return "groq"
         return "demo"

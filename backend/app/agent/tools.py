@@ -381,6 +381,29 @@ TOOLS: dict[str, Tool] = {
 }
 
 
+def model_view(name: str, output: dict) -> dict:
+    """Lo que ve el modelo del resultado de una herramienta.
+
+    La interfaz recibe el resultado completo; al modelo le basta un resumen. Cada resultado se
+    reenvía en todas las llamadas siguientes del turno, así que recortarlo ahorra mucha cuota.
+    """
+    if name == "build_itinerary" and "days" in output:
+        return {
+            "destination": output.get("destination"),
+            "days": [
+                {"day": d["day"], "plan": [f"{a['slot']}: {a['name']} ({a['price_eur']} €)" for a in d["activities"]]}
+                for d in output["days"]
+            ],
+        }
+    if name == "search_travel_guides" and "results" in output:
+        keep = ("destination", "section", "text", "source")
+        return {
+            "results": [{k: r[k] for k in keep} for r in output["results"]],
+            "instructions": output.get("instructions"),
+        }
+    return output
+
+
 def tool_schemas() -> list[dict]:
     return [t.schema() for t in TOOLS.values()]
 
