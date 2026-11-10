@@ -2,7 +2,7 @@
 
 Agente de IA que planifica viajes completos (destino, clima, presupuesto e itinerario) y responde dudas prácticas con **RAG** sobre guías de cada destino, usando un **loop agéntico escrito a mano** sobre la API de Claude. La interfaz muestra en directo cómo razona el agente: cada herramienta que decide usar, sus argumentos, el resultado y cuánto tarda.
 
-**Angular 22 · TypeScript · Python · FastAPI · Claude API y Groq (tool use) · RAG (BM25 + embeddings, pgvector) · PostgreSQL · Redis · Server-Sent Events · Docker · Kubernetes · GitHub Actions**
+**Angular 22 · TypeScript · Python · FastAPI · Claude, Gemini y Groq (tool use) · RAG (BM25 + embeddings, pgvector) · PostgreSQL · Redis · Server-Sent Events · Docker · Kubernetes · GitHub Actions**
 
 ![Rumbo](docs/screenshot.png)
 
@@ -13,7 +13,7 @@ Agente de IA que planifica viajes completos (destino, clima, presupuesto e itine
 - **Herramientas tipadas con Pydantic.** Cada herramienta se define una vez con un modelo Pydantic: de ahí sale el JSON Schema que ve el modelo y la validación de lo que devuelve. Si el modelo envía argumentos inválidos, recibe el error y reintenta.
 - **Streaming en tiempo real.** FastAPI emite cada paso del agente como Server-Sent Events y Angular los pinta al instante (fetch + ReadableStream, porque `EventSource` no admite POST).
 - **Observabilidad.** Cada ejecución guarda pasos, llamadas a herramientas, errores, tokens y duración (`/api/stats`). La cabecera muestra la tasa de éxito y el consumo.
-- **Proveedor de modelo intercambiable.** El loop habla con una interfaz `ModelProvider`. Hay tres implementaciones: Claude (`AnthropicProvider`), cualquier API compatible con OpenAI como Groq (`OpenAICompatibleProvider`, con un modelo gratuito) y un **modo demo** que funciona sin API key ni coste.
+- **Proveedor de modelo intercambiable.** El loop habla con una interfaz `ModelProvider`. Hay tres implementaciones: Claude (`AnthropicProvider`), cualquier API compatible con OpenAI como Gemini o Groq (`OpenAICompatibleProvider`, con modelos gratuitos) y un **modo demo** que funciona sin API key ni coste.
 - **IA real gratis y sin sorpresas.** Límites por IP, presupuesto diario de tokens por debajo de la cuota gratuita y paso automático al modo demo cuando se agotan: nadie puede generar costes ni romper la demo. Detalles en [Modelo gratuito y protección](#modelo-gratuito-y-protección-frente-a-abusos).
 - **Seguridad básica.** El viaje final se recalcula en el servidor en lugar de confiar en datos largos generados por el modelo, la entrada está limitada y la clave de API nunca llega al frontend.
 - **Backend sin estado, listo para escalar.** El historial de cada conversación y su bloqueo viven en Redis, y los datos en PostgreSQL. Cualquier réplica puede atender el siguiente mensaje, así que el backend escala horizontalmente en Kubernetes. Probado con 3 réplicas atendiendo la misma conversación.
@@ -93,7 +93,7 @@ npm install
 npm start                       # http://localhost:4200
 ```
 
-Sin claves en `backend/.env` arranca en **modo demo**. Con `ANTHROPIC_API_KEY` usa Claude (`AGENT_MODEL`, por defecto `claude-sonnet-5-5`); con `GROQ_API_KEY`, un modelo gratuito de Groq (`GROQ_MODEL`, por defecto `openai/gpt-oss-120b`).
+Sin claves en `backend/.env` arranca en **modo demo**. Con `ANTHROPIC_API_KEY` usa Claude (`AGENT_MODEL`, por defecto `claude-sonnet-5-5`); con `GEMINI_API_KEY`, Gemini gratis (`GEMINI_MODEL`, por defecto `gemini-flash-latest`); con `GROQ_API_KEY`, Groq gratis (`GROQ_MODEL`, por defecto `openai/gpt-oss-120b`).
 
 En local no hace falta nada más: sin `DATABASE_URL` usa SQLite y sin `REDIS_URL` guarda las sesiones en memoria.
 
@@ -153,7 +153,11 @@ kind delete cluster --name rumbo                         # borrar el clúster
 
 ## Modelo gratuito y protección frente a abusos
 
-Para que la demo pública use un modelo real **sin coste**, Rumbo puede usar el plan gratuito de [Groq](https://console.groq.com) (sin tarjeta) a través de `OpenAICompatibleProvider`, que también sirve para Gemini u OpenRouter cambiando `GROQ_BASE_URL` y `GROQ_MODEL`. El historial se guarda en un formato neutro, así que el proveedor puede cambiar a mitad de una conversación.
+Para que la demo pública use un modelo real **sin coste**, Rumbo puede usar el plan gratuito de [Gemini](https://aistudio.google.com) o de [Groq](https://console.groq.com), ambos sin tarjeta, a través de `OpenAICompatibleProvider`. El historial se guarda en un formato neutro, así que el proveedor puede cambiar a mitad de una conversación.
+
+- **Gemini 3:** las llamadas a herramientas llevan una *thought signature* que hay que reenviar en el siguiente turno; el proveedor la conserva en el historial.
+- **Menos tokens por consulta:** el modelo recibe una vista compacta de los resultados grandes (el itinerario pasa de ~1.400 a ~500 caracteres), mientras que la interfaz recibe el detalle completo. Como cada resultado se reenvía en todas las llamadas siguientes del turno, el ahorro se multiplica.
+- **Razonamiento en nivel bajo** (`reasoning_effort: low`) para no gastar cuota en tokens de razonamiento.
 
 Sin método de pago no hay factura posible; además, la app se protege en tres capas (`backend/app/limits.py`):
 
