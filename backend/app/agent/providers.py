@@ -3,12 +3,24 @@
 El loop del agente no conoce ningún SDK: habla con un `ModelProvider` que devuelve
 un `ModelTurn` normalizado. Así se puede cambiar de modelo, o usar el modo demo
 sin API key, sin tocar el loop.
+
+- `AnthropicProvider`: Claude.
+- `OpenAICompatibleProvider`: cualquier API compatible con OpenAI (Groq, Gemini,
+  OpenRouter...). Con el plan gratuito de Groq permite usar un modelo real sin coste.
+
+El historial se guarda siempre en formato de bloques de Anthropic (text, tool_use,
+tool_result); cada proveedor lo traduce a su API. Por eso se puede cambiar de proveedor,
+o pasar al modo demo, a mitad de una conversación.
 """
 
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
+
+import httpx
 
 
 @dataclass
@@ -27,6 +39,16 @@ class ModelTurn:
     history_content: Any  # contenido exacto que hay que guardar en el historial
     input_tokens: int = 0
     output_tokens: int = 0
+    cached_tokens: int = 0  # tokens de entrada servidos desde caché (no cuentan para las cuotas de Groq)
+    notice: str | None = None  # aviso para el usuario (p. ej. "paso al modo demo")
+
+
+class RateLimited(Exception):
+    """El proveedor ha rechazado la petición por cuota (HTTP 429)."""
+
+    def __init__(self, retry_after: float | None, message: str = "") -> None:
+        super().__init__(message or f"Cuota del proveedor agotada (reintentar en {retry_after} s)")
+        self.retry_after = retry_after
 
 
 class ModelProvider(Protocol):
@@ -50,6 +72,15 @@ class AnthropicProvider:
         self.max_tokens = max_tokens
 
     def complete(self, system: str, tools: list[dict], messages: list[dict]) -> ModelTurn:
+        import anthropic
+
+        try:
+            return self._complete(system, tools, messages)
+        except anthropic.RateLimitError as e:
+            retry = e.response.headers.get("retry-after") if e.response is not None else None
+            raise RateLimited(float(retry) if retry else None, str(e)) from e
+
+    def _complete(self, system: str, tools: list[dict], messages: list[dict]) -> ModelTurn:
         response = self.client.beta.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
@@ -78,4 +109,153 @@ class AnthropicProvider:
             history_content=[b.model_dump(mode="json", exclude_none=True) for b in response.content],
             input_tokens=getattr(usage, "input_tokens", 0) or 0,
             output_tokens=getattr(usage, "output_tokens", 0) or 0,
+        )
+
+
+# --- APIs compatibles con OpenAI (Groq, Gemini, OpenRouter...) -----------------------
+
+
+def to_openai_tools(tools: list[dict]) -> list[dict]:
+    return [
+        {"type": "function", "function": {"name": t["name"], "description": t["description"], "parameters": t["input_schema"]}}
+        for t in tools
+    ]
+
+
+def to_openai_messages(system: str, messages: list[dict]) -> list[dict]:
+    """Traduce el historial (bloques de Anthropic) al formato de chat de OpenAI."""
+    out: list[dict] = [{"role": "system", "content": system}]
+    for m in messages:
+        content = m["content"]
+        if isinstance(content, str):
+            out.append({"role": m["role"], "content": content})
+            continue
+        if m["role"] == "user":
+            for b in content:
+                if b.get("type") == "tool_result":
+                    result = b.get("content", "")
+                    out.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": b["tool_use_id"],
+                            "content": result if isinstance(result, str) else json.dumps(result, ensure_ascii=False),
+                        }
+                    )
+                elif b.get("type") == "text":
+                    out.append({"role": "user", "content": b["text"]})
+            continue
+        # Asistente: el texto va en `content` y las herramientas en `tool_calls` (los bloques de
+        # razonamiento de Claude no tienen equivalente y se omiten).
+        text = "\n".join(b["text"] for b in content if b.get("type") == "text" and b.get("text"))
+        calls = [
+            {
+                "id": b["id"],
+                "type": "function",
+                "function": {"name": b["name"], "arguments": json.dumps(b.get("input", {}), ensure_ascii=False)},
+            }
+            for b in content
+            if b.get("type") == "tool_use"
+        ]
+        msg: dict[str, Any] = {"role": "assistant", "content": text or None}
+        if calls:
+            msg["tool_calls"] = calls
+        if text or calls:
+            out.append(msg)
+    return out
+
+
+def _retry_after(response: httpx.Response) -> float | None:
+    header = response.headers.get("retry-after")
+    if header:
+        try:
+            return float(header)
+        except ValueError:
+            pass
+    # Groq también lo indica en el mensaje: "Please try again in 6m11.52s".
+    if m := re.search(r"try again in (?:(\d+)m)?([\d.]+)s", response.text):
+        return int(m.group(1) or 0) * 60 + float(m.group(2))
+    return None
+
+
+class OpenAICompatibleProvider:
+    """Chat Completions con tool calling, con httpx (sin SDK)."""
+
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        base_url: str = "https://api.groq.com/openai/v1",
+        name: str = "groq",
+        max_tokens: int = 2048,
+        timeout_s: float = 60.0,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
+        self.name = name
+        self.model = model
+        self.max_tokens = max_tokens
+        self.client = httpx.Client(
+            base_url=base_url, headers={"Authorization": f"Bearer {api_key}"}, timeout=timeout_s, transport=transport
+        )
+
+    def _payload(self, system: str, tools: list[dict], messages: list[dict]) -> dict:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": to_openai_messages(system, messages),
+            "tools": to_openai_tools(tools),
+            "tool_choice": "auto",
+            "max_tokens": self.max_tokens,
+            "temperature": 0.3,
+        }
+        if self.model.startswith("openai/gpt-oss"):
+            payload["reasoning_effort"] = "low"  # menos tokens de razonamiento: cuidan la cuota gratuita
+        return payload
+
+    def complete(self, system: str, tools: list[dict], messages: list[dict]) -> ModelTurn:
+        payload = self._payload(system, tools, messages)
+        for attempt in range(2):
+            r = self.client.post("/chat/completions", json=payload)
+            if r.status_code == 429:
+                raise RateLimited(_retry_after(r), r.text[:300])
+            # Algunos modelos abiertos generan a veces una llamada a herramienta mal formada
+            # (Groq responde 400 "tool_use_failed"): se reintenta una vez.
+            if r.status_code == 400 and "tool_use_failed" in r.text and attempt == 0:
+                continue
+            r.raise_for_status()
+            return self._parse(r.json())
+        raise RuntimeError("El modelo no ha generado una llamada a herramienta válida")
+
+    @staticmethod
+    def _parse(data: dict) -> ModelTurn:
+        choice = data["choices"][0]
+        msg = choice["message"]
+        blocks: list[Block] = []
+        if msg.get("content"):
+            blocks.append(Block(type="text", text=msg["content"]))
+        for call in msg.get("tool_calls") or []:
+            raw = call["function"].get("arguments") or "{}"
+            try:
+                args = json.loads(raw)
+            except json.JSONDecodeError:
+                args = {"_argumentos_no_validos": raw}  # la validación Pydantic devolverá el error al modelo
+            blocks.append(
+                Block(type="tool_use", id=call["id"], name=call["function"]["name"], input=args if isinstance(args, dict) else {})
+            )
+        if any(b.type == "tool_use" for b in blocks):
+            stop = "tool_use"
+        else:
+            stop = {"length": "max_tokens", "content_filter": "refusal"}.get(choice.get("finish_reason"), "end_turn")
+        history = [
+            {"type": "text", "text": b.text}
+            if b.type == "text"
+            else {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
+            for b in blocks
+        ]
+        usage = data.get("usage") or {}
+        return ModelTurn(
+            stop_reason=stop,
+            blocks=blocks,
+            history_content=history,
+            input_tokens=usage.get("prompt_tokens", 0) or 0,
+            output_tokens=usage.get("completion_tokens", 0) or 0,
+            cached_tokens=(usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0) or 0,
         )
