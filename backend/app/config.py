@@ -14,8 +14,9 @@ class Settings(BaseSettings):
     agent_model: str = "claude-sonnet-5-5"
     agent_effort: str = "medium"
     agent_max_iterations: int = 12
-    # "auto": Claude si hay ANTHROPIC_API_KEY; si no, Gemini (GEMINI_API_KEY); si no, Groq (GROQ_API_KEY);
-    # y si no, el modo demo.
+    # "auto": cadena con los proveedores que tengan clave, en este orden:
+    #   Claude (ANTHROPIC_API_KEY) → Gemini (GEMINI_API_KEY) → Groq (GROQ_API_KEY) → extra (EXTRA_LLM_API_KEY).
+    # Si uno agota su cuota o no responde, el turno sigue con el siguiente; al final de la cadena, el modo demo.
     # "demo" fuerza el modo demo.
     agent_mode: str = "auto"
     demo_delay_ms: int = 700
@@ -27,6 +28,12 @@ class Settings(BaseSettings):
     groq_api_key: str | None = None
     groq_model: str = "openai/gpt-oss-120b"
     groq_base_url: str = "https://api.groq.com/openai/v1"
+    # Proveedor extra: cualquier API compatible con OpenAI (Hugging Face, OpenRouter, DeepSeek...).
+    # Por defecto, el router de Hugging Face; para otro, cambia la URL, el modelo y el nombre.
+    extra_llm_api_key: str | None = None
+    extra_llm_name: str = "huggingface"
+    extra_llm_model: str = "openai/gpt-oss-120b"
+    extra_llm_base_url: str = "https://router.huggingface.co/v1"
     llm_max_output_tokens: int = 2048
 
     # Protección y presupuesto (ver app/limits.py). El presupuesto diario por defecto deja margen
@@ -48,17 +55,23 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:4200"
 
     @property
-    def llm_provider(self) -> str:
-        """Proveedor real configurado: "claude", "gemini", "groq" o "demo" si no hay ninguno."""
+    def llm_chain(self) -> list[str]:
+        """Proveedores reales con clave, en orden de prioridad ("claude", "gemini", "groq", "extra")."""
         if self.agent_mode == "demo":
-            return "demo"
-        if self.anthropic_api_key:
-            return "claude"
-        if self.gemini_api_key:
-            return "gemini"
-        if self.groq_api_key:
-            return "groq"
-        return "demo"
+            return []
+        keys = {
+            "claude": self.anthropic_api_key,
+            "gemini": self.gemini_api_key,
+            "groq": self.groq_api_key,
+            "extra": self.extra_llm_api_key,
+        }
+        return [name for name, key in keys.items() if key]
+
+    @property
+    def llm_provider(self) -> str:
+        """Primer proveedor de la cadena, o "demo" si no hay ninguno."""
+        chain = self.llm_chain
+        return chain[0] if chain else "demo"
 
     @property
     def use_demo(self) -> bool:

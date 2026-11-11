@@ -132,13 +132,21 @@ class UsageLimits:
             _, _, day = self._windows()
             self.store.incr(f"tokens:{day}", tokens, 90_000)
 
-    def cooldown(self, seconds: float) -> None:
-        """El proveedor ha dicho "espera X segundos": nadie usa la IA real hasta entonces."""
-        until = int(self._clock() + max(1.0, seconds))
-        self.store.set("cooldown", until, int(max(1.0, seconds)) + 5)
+    def cooldown(self, seconds: float, provider: str | None = None) -> None:
+        """El proveedor ha dicho "espera X segundos": nadie lo usa hasta entonces.
 
-    def cooling_down(self) -> bool:
-        return self.store.get("cooldown") > self._clock()
+        Con `provider`, la pausa afecta solo a ese proveedor (la cadena sigue con el siguiente);
+        sin él, a toda la IA real.
+        """
+        until = int(self._clock() + max(1.0, seconds))
+        key = f"cooldown:{provider}" if provider else "cooldown"
+        self.store.set(key, until, int(max(1.0, seconds)) + 5)
+
+    def cooling_down(self, provider: str | None = None) -> bool:
+        """True si la IA real está en pausa o, con `provider`, si ese proveedor lo está."""
+        if self.store.get("cooldown") > self._clock():
+            return True
+        return provider is not None and self.store.get(f"cooldown:{provider}") > self._clock()
 
     def can_start_run(self) -> bool:
         return not self.cooling_down() and self.tokens_remaining() >= self.config.min_tokens_per_run

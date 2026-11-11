@@ -198,8 +198,9 @@ def test_full_agent_run_with_openai_compatible_provider():
 
 
 class FakeBudget:
-    def __init__(self, ok=True):
-        self.ok, self.spent, self.cooldowns = ok, 0, []
+    def __init__(self, ok=True, cooling=()):
+        self.ok, self.spent, self.cooldowns, self.paused = ok, 0, [], []
+        self.cooling = set(cooling)
 
     def can_call(self):
         return self.ok
@@ -207,15 +208,20 @@ class FakeBudget:
     def spend(self, tokens):
         self.spent += tokens
 
-    def cooldown(self, seconds):
+    def cooldown(self, seconds, provider=None):
         self.cooldowns.append(seconds)
+        self.paused.append(provider)
+
+    def cooling_down(self, provider=None):
+        return provider in self.cooling
 
 
 class Scripted:
-    name, model = "groq", "fake"
+    model = "fake"
 
-    def __init__(self, items):
+    def __init__(self, items, name="groq"):
         self.items = list(items)
+        self.name = name
 
     def complete(self, system, tools, messages):
         item = self.items.pop(0)
@@ -335,7 +341,7 @@ def real_ai(monkeypatch):
             return turn("Respuesta del modelo real", inp=200, out=30, cached=0)
 
     lim = UsageLimits(MemoryCounterStore(), LimitsConfig(flood_per_minute=5, llm_per_hour=1, llm_per_day=5))
-    monkeypatch.setattr(main, "real_provider", FakeReal())
+    monkeypatch.setattr(main, "real_providers", [FakeReal()])
     monkeypatch.setattr(main, "limits", lim)
     return lim
 
@@ -435,5 +441,116 @@ def test_guarded_falls_back_to_demo_when_provider_unavailable():
     g = GuardedProvider(Scripted([ProviderUnavailable("HTTP 503")]), DemoProvider(), budget)
     events = list(Agent(g).run([], "¿Necesito visado para Japón?", ToolContext(), stats := RunStats()))
     assert budget.cooldowns == [30] and g.name == "demo"
-    assert any(e["type"] == "notice" and "saturado" in e["text"] for e in events)
+    assert any(e["type"] == "notice" and "no está disponible" in e["text"] for e in events)
     assert stats.status == "completed"
+
+
+# --- Cadena de proveedores (Gemini → Groq → extra → demo) ----------------------------
+
+
+def test_chain_moves_to_next_provider_when_quota_is_exhausted():
+    budget = FakeBudget()
+    gemini = Scripted([RateLimited(3600)], name="gemini")
+    groq = Scripted([turn("respuesta de Groq")], name="groq")
+    g = GuardedProvider([gemini, groq], DemoProvider(), budget)
+    t = g.complete("s", [], [{"role": "user", "content": "x"}])
+    assert t.blocks[0].text == "respuesta de Groq" and g.name == "groq" and not g.switched
+    assert t.notice == "Gemini ha alcanzado su cuota gratuita: continúo con Groq."
+    assert budget.paused == ["gemini"] and budget.cooldowns == [3600]
+    # El siguiente paso del mismo turno sigue con Groq, sin volver a probar Gemini.
+    groq.items.append(turn("otra"))
+    assert g.complete("s", [], [{"role": "user", "content": "x"}]).notice is None
+
+
+def test_chain_ends_in_demo_when_every_provider_fails():
+    budget = FakeBudget()
+    chain = [
+        Scripted([RateLimited(600)], name="gemini"),
+        Scripted([ProviderUnavailable("HTTP 503")], name="groq"),
+        Scripted([RateLimited(3600)], name="huggingface"),
+    ]
+    g = GuardedProvider(chain, DemoProvider(), budget)
+    events = list(Agent(g).run([], "¿Necesito visado para Japón?", ToolContext(), stats := RunStats()))
+    notice = next(e["text"] for e in events if e["type"] == "notice")
+    assert "continúo con Groq" in notice and "continúo con Hugging Face" in notice and notice.endswith("modo demo.")
+    assert budget.paused == ["gemini", "groq", "huggingface"] and g.name == "demo"
+    assert stats.status == "completed"
+
+
+def test_chain_skips_providers_in_cooldown_without_notice():
+    g = GuardedProvider(
+        [Scripted([], name="gemini"), Scripted([turn("de Groq")], name="groq")], DemoProvider(), FakeBudget(cooling={"gemini"})
+    )
+    t = g.complete("s", [], [{"role": "user", "content": "x"}])
+    assert t.blocks[0].text == "de Groq" and t.notice is None
+
+
+def test_provider_cooldown_is_per_provider(limits):
+    lim, _ = limits
+    lim.cooldown(600, "gemini")
+    assert lim.cooling_down("gemini") and not lim.cooling_down("groq") and not lim.cooling_down()
+    assert lim.can_start_run()  # el resto de la cadena sigue disponible
+
+
+def test_api_skips_provider_in_cooldown(monkeypatch):
+    class Fake:
+        model = "fake"
+
+        def __init__(self, name):
+            self.name = name
+
+        def complete(self, system, tools, messages):
+            return turn(f"Respuesta de {self.name}", cached=0)
+
+    lim = UsageLimits(MemoryCounterStore(), LimitsConfig())
+    lim.cooldown(3600, "gemini")
+    monkeypatch.setattr(main, "real_providers", [Fake("gemini"), Fake("groq")])
+    monkeypatch.setattr(main, "limits", lim)
+    with TestClient(main.app) as client:
+        usage = client.get("/api/usage").json()
+        assert usage["mode"] == "groq" and usage["chain"] == ["gemini", "groq"] and usage["real_ai"] is True
+        events = sse(client.post("/api/chat", json={"message": "hola"}).text)
+        assert events[0]["mode"] == "groq" and events[-2]["text"] == "Respuesta de groq"
+        lim.cooldown(3600, "groq")
+        events = sse(client.post("/api/chat", json={"message": "hola"}).text)
+        assert events[0]["mode"] == "demo" and "agotado su cuota" in events[1]["text"]
+
+
+def test_provider_maps_402_and_401_to_chain_errors():
+    p = provider_with([httpx.Response(402, json={"error": "credits exhausted"}), httpx.Response(401, text="bad key")])
+    with pytest.raises(RateLimited) as e:
+        p.complete("s", [], [{"role": "user", "content": "x"}])
+    assert e.value.retry_after == 3600
+    with pytest.raises(ProviderUnavailable):
+        p.complete("s", [], [{"role": "user", "content": "x"}])
+
+
+def test_thought_signatures_are_only_sent_to_gemini():
+    signature = {"google": {"thought_signature": "firma-123"}}
+    history = [
+        {"role": "user", "content": "clima"},
+        {
+            "role": "assistant",
+            "content": [{"type": "tool_use", "id": "c1", "name": "get_climate", "input": {}, "extra_content": signature}],
+        },
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "c1", "content": "15 °C"}]},
+    ]
+    seen = []
+    p = provider_with([httpx.Response(200, json=completion("ok"))], seen)  # modelo de Groq
+    p.complete("s", [], history)
+    sent = next(m for m in seen[0]["messages"] if m.get("tool_calls"))["tool_calls"][0]
+    assert "extra_content" not in sent
+
+
+def test_settings_build_the_chain_in_priority_order():
+    from app.config import Settings
+
+    s = Settings(
+        _env_file=None, agent_mode="auto", anthropic_api_key=None, gemini_api_key="g", groq_api_key="q", extra_llm_api_key="hf"
+    )
+    assert s.llm_chain == ["gemini", "groq", "extra"] and s.llm_provider == "gemini"
+    only_extra = Settings(
+        _env_file=None, agent_mode="auto", anthropic_api_key=None, gemini_api_key=None, groq_api_key=None, extra_llm_api_key="hf"
+    )
+    assert only_extra.llm_chain == ["extra"] and only_extra.extra_llm_base_url == "https://router.huggingface.co/v1"
+    assert Settings(_env_file=None, agent_mode="demo", gemini_api_key="g", anthropic_api_key=None).llm_chain == []
