@@ -82,6 +82,8 @@ export interface Usage {
   mode: string;
   model: string;
   real_ai: boolean;
+  /** Proveedores reales configurados, en orden de prioridad. */
+  chain?: string[];
   remaining?: { hour: number; day: number };
   budget_remaining_pct?: number;
 }

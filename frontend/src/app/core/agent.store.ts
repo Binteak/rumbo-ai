@@ -24,6 +24,16 @@ function loadMode(): ChatMode {
   }
 }
 
+/** Nombres de los proveedores de modelo tal y como se muestran en la cabecera. */
+const PROVIDER_LABELS: Record<string, string> = {
+  claude: 'Claude',
+  gemini: 'Gemini',
+  groq: 'Groq',
+  huggingface: 'Hugging Face',
+  openrouter: 'OpenRouter',
+  deepseek: 'DeepSeek',
+};
+
 export const TOOL_LABELS: Record<string, string> = {
   search_destinations: 'Buscar destinos',
   get_climate: 'Consultar clima',
@@ -58,10 +68,10 @@ export class AgentStore {
     const mode = this.usage()?.mode ?? this.health()?.mode;
     return !!mode && mode !== 'demo';
   });
-  /** "gemini" → "Gemini". */
+  /** "gemini" → "Gemini", "huggingface" → "Hugging Face". */
   readonly providerLabel = computed(() => {
     const mode = this.usage()?.mode ?? this.health()?.mode ?? '';
-    return mode ? mode[0].toUpperCase() + mode.slice(1) : 'IA real';
+    return mode ? (PROVIDER_LABELS[mode] ?? mode[0].toUpperCase() + mode.slice(1)) : 'IA real';
   });
   /** Modo con el que se enviará el próximo mensaje. */
   readonly effectiveMode = computed<ChatMode>(() =>

@@ -45,6 +45,13 @@ describe('AgentStore', () => {
     expect(chat).toHaveBeenLastCalledWith('3 días en Lisboa', null, 'real');
   });
 
+  it('muestra el nombre legible del proveedor que atiende', () => {
+    store.usage.set({ mode: 'huggingface', model: 'openai/gpt-oss-120b', real_ai: true, chain: ['gemini', 'groq', 'huggingface'] });
+    expect(store.providerLabel()).toBe('Hugging Face');
+    store.usage.set({ mode: 'mistral', model: 'x', real_ai: true });
+    expect(store.providerLabel()).toBe('Mistral');
+  });
+
   it('construye la traza a partir de los eventos del agente', () => {
     store.send('3 días en Seúl');
     expect(store.running()).toBe(true);
