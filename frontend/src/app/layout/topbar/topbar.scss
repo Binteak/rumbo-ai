@@ -1,0 +1,60 @@
+:host { display: block; position: sticky; top: 0; z-index: 5; }
+
+.topbar {
+  display: flex; align-items: center; gap: 24px;
+  padding: 14px 24px; border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(14px); background: rgba(7, 11, 22, 0.6);
+}
+.brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+.brand strong { font: 700 18px var(--display); display: block; }
+.brand small { color: var(--muted); font-size: 12px; }
+.logo {
+  width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center;
+  background: var(--grad); color: #0b1020; font: 700 18px var(--display);
+  box-shadow: 0 6px 24px rgba(139, 92, 246, 0.45);
+}
+
+.nav {
+  display: flex; gap: 4px;
+  a {
+    padding: 6px 12px; border-radius: 10px; font-size: 13px; color: var(--muted); text-decoration: none;
+    transition: color 0.15s, background 0.15s;
+    &:hover { color: var(--text); }
+    &.active { color: var(--text); background: rgba(255, 255, 255, 0.07); }
+    &:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+  }
+}
+
+.kpis { display: flex; gap: 18px; margin-left: auto; color: var(--muted); font-size: 12.5px; }
+.kpis b { color: var(--text); font-family: var(--display); font-size: 14px; margin-right: 4px; }
+
+.mode {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--line-strong); font-size: 12px; background: rgba(52, 211, 153, 0.08);
+  i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+  &.demo { background: rgba(251, 191, 36, 0.08); i { background: var(--amber); box-shadow: 0 0 10px var(--amber); } }
+  &.off i { background: var(--err); box-shadow: 0 0 10px var(--err); }
+}
+
+.mode-switch {
+  display: inline-flex; padding: 3px; border-radius: 999px; border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, 0.03);
+  button {
+    border: 0; background: transparent; color: inherit; font: inherit; font-size: 12px;
+    padding: 5px 12px; border-radius: 999px; cursor: pointer; opacity: 0.7;
+    transition: background 0.15s, opacity 0.15s;
+    &:hover:not(:disabled) { opacity: 1; }
+    &.active { background: rgba(255, 255, 255, 0.1); opacity: 1; font-weight: 600; }
+    &:disabled { cursor: not-allowed; opacity: 0.4; }
+    &:focus-visible { outline: 2px solid var(--ok); outline-offset: 1px; }
+  }
+}
+
+@media (max-width: 1200px) {
+  .kpis { display: none; }
+  .nav { margin-right: auto; }
+}
+@media (max-width: 760px) {
+  .topbar { flex-wrap: wrap; gap: 12px; padding: 12px; }
+  .brand small { display: none; }
+}

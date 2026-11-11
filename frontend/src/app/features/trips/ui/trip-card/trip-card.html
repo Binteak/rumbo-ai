@@ -1,0 +1,7 @@
+@let t = trip();
+<button class="saved-card" [class.active]="active()" (click)="selected.emit()">
+  <span>{{ t.flag }}</span>
+  <strong>{{ t.destinationName }}</strong>
+  <small>{{ t.days }} días · {{ t.budget.totalEur | number }} €</small>
+  <i class="del" role="button" aria-label="Eliminar" (click)="remove($event)">×</i>
+</button>

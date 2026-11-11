@@ -1,0 +1,57 @@
+:host { display: block; }
+
+.trip { display: flex; flex-direction: column; gap: 16px; animation: rise 0.4s ease both; }
+.hero {
+  position: relative; overflow: hidden; display: flex; gap: 20px; align-items: center;
+  padding: 28px; border-radius: 22px; border: 1px solid var(--line-strong);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--h1) 30%, #0b1020), color-mix(in srgb, var(--h2) 32%, #0b1020));
+  h1 { font-size: 30px; line-height: 1.1; margin: 2px 0 8px; }
+  .eyebrow { color: rgba(255, 255, 255, 0.7); }
+  .summary { color: rgba(230, 235, 245, 0.85); max-width: 640px; }
+}
+.hero-glow {
+  position: absolute; width: 340px; height: 340px; right: -80px; top: -140px; border-radius: 50%;
+  background: radial-gradient(circle, var(--h1), transparent 65%); opacity: 0.55; filter: blur(10px);
+}
+.flag { font-size: 64px; line-height: 1; filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.4)); position: relative; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px;
+  span { padding: 5px 11px; border-radius: 999px; background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(255, 255, 255, 0.14); font-size: 12px; }
+}
+.cards { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+.big { font: 700 34px/1.1 var(--display); background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; small { font-size: 18px; } }
+.bars { list-style: none; padding: 0; margin: 16px 0 0; display: grid; gap: 10px;
+  li { display: grid; grid-template-columns: 120px 1fr 70px; align-items: center; gap: 10px; font-size: 12.5px; }
+  strong { text-align: right; font-weight: 600; }
+}
+.bar { height: 8px; border-radius: 99px; background: rgba(255, 255, 255, 0.06); overflow: hidden;
+  i { display: block; height: 100%; border-radius: inherit; background: var(--grad); animation: grow 0.9s cubic-bezier(.2,.8,.2,1) both; }
+}
+@keyframes grow { from { width: 0 !important; } }
+.verdict { margin-top: 14px; padding: 9px 12px; border-radius: 10px; background: rgba(45, 212, 191, 0.08); border: 1px solid rgba(45, 212, 191, 0.25); font-size: 13px; }
+
+.days { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+.day {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; animation: rise 0.45s ease both;
+  header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; small { color: var(--muted); font-size: 11.5px; } }
+}
+.day-n { font: 700 16px var(--display); }
+.act { padding: 10px 0; border-top: 1px dashed var(--line);
+  p { font-weight: 500; margin: 2px 0 6px; }
+}
+.slot { font: 10.5px var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11.5px; color: var(--muted); align-items: center; }
+.tag {
+  padding: 2px 8px; border-radius: 6px; font-size: 11px; color: var(--text); background: rgba(139, 92, 246, 0.18);
+  &[data-cat='gastronomia'] { background: rgba(251, 113, 133, 0.2); }
+  &[data-cat='historia'] { background: rgba(251, 191, 36, 0.18); }
+  &[data-cat='naturaleza'], &[data-cat='playa'] { background: rgba(52, 211, 153, 0.18); }
+  &[data-cat='nocturna'] { background: rgba(99, 102, 241, 0.25); }
+  &[data-cat='arte'], &[data-cat='diseno'] { background: rgba(236, 72, 153, 0.2); }
+  &[data-cat='aventura'], &[data-cat='fotografia'] { background: rgba(45, 212, 191, 0.18); }
+}
+
+@media (max-width: 760px) {
+  .cards { grid-template-columns: 1fr; }
+  .hero { flex-direction: column; text-align: center; .chips { justify-content: center; } }
+}

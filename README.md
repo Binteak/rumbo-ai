@@ -237,7 +237,7 @@ En local no hace falta nada más: sin `DATABASE_URL` usa SQLite y sin `REDIS_URL
 ### Despliegue en Render (demo pública)
 
 - **Backend:** Web Service con el código de `backend/` (su `Dockerfile`, o `pip install -r requirements.txt` y `uvicorn app.main:app --host 0.0.0.0 --port $PORT`). Variables: las claves de la cadena que quieras usar (`GEMINI_API_KEY`, `GROQ_API_KEY`, `EXTRA_LLM_API_KEY`), `CORS_ORIGINS` con la URL del frontend y, opcionalmente, los límites de uso. **No** definas `ANTHROPIC_API_KEY` ni `AGENT_MODE=demo` si quieres el modelo gratuito.
-- **Frontend:** Static Site con `npx ng build --configuration render`, que apunta la API al backend desplegado (`src/environments/environment.render.ts`).
+- **Frontend:** Static Site con `npx ng build --configuration render`, que apunta la API al backend desplegado (`src/environments/environment.render.ts`). Al ser una SPA con rutas, hay que añadir en Render una regla *Rewrite* de `/*` a `/index.html`; sin ella, recargar `/viajes` devuelve 404.
 - En el plan gratuito, la base de datos SQLite se pierde al reiniciar o desplegar, y el RAG se reindexa en memoria al arrancar (milisegundos).
 
 ### Con Docker (PostgreSQL + pgvector + Redis + 2 réplicas)
@@ -332,9 +332,25 @@ backend/
   tests/                   pytest
 k8s/                       Manifiestos de Kubernetes (kustomize)
 frontend/
-  src/app/core/            ApiService (SSE), AgentStore (signals), modelos
-  src/app/components/      Chat, traza del agente, vista del viaje
+  src/app/app.config.ts    Raíz de composición: enchufa cada puerto con su adaptador
+  src/app/app.routes.ts    Rutas de la SPA: /, /viajes y /viajes/:id (carga perezosa)
+  src/app/layout/          Cabecera fija (navegación, cifras y selector de modo)
+  src/app/core/status/     Estado del servicio: modo, cupo y estadísticas
+  src/app/features/
+    planner/               Chat y traza del agente
+    trips/                 Viajes guardados: lista y detalle
 ```
+
+El frontend sigue una arquitectura hexagonal. Cada funcionalidad se divide en cuatro capas y las dependencias apuntan siempre hacia dentro:
+
+| Capa | Qué contiene | Ejemplo |
+|---|---|---|
+| `domain/` | Modelos y reglas en TypeScript puro, sin Angular | `run.ts`: reducer puro que convierte los eventos del agente en conversación y traza |
+| `application/` | Puertos (clases abstractas) y stores con signals | `AgentGateway`, `TripRepository`, `ChatStore` |
+| `infrastructure/` | Adaptadores de los puertos y traducción de los DTO de la API | `SseAgentGateway`, `HttpTripRepository`, `trip.dto.ts` |
+| `ui/` | Componentes, cada uno en su carpeta con `.ts`, `.html`, `.scss` y `.spec.ts` | `chat-panel/`, `trip-detail/` |
+
+Las páginas son contenedores que conectan los stores con componentes presentacionales (`input()` / `output()`). Los tests sustituyen los adaptadores por dobles en memoria, y `app.integration.spec.ts` recorre el flujo completo con la aplicación real y sin red.
 
 ## Historial de versiones
 

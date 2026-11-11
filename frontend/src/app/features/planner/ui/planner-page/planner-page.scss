@@ -1,0 +1,29 @@
+/* Tres columnas: chat, viaje y traza */
+.layout {
+  display: grid; grid-template-columns: 360px minmax(0, 1fr) 360px; gap: 18px;
+  padding: 18px 24px 24px; height: calc(100vh - 65px);
+}
+.center { overflow-y: auto; min-height: 0; padding-right: 4px; }
+
+.trip-empty {
+  position: relative; text-align: center; padding: 90px 40px 70px; border-radius: 22px; border: 1px dashed var(--line-strong);
+  h1 { font-size: 34px; max-width: 640px; margin: 24px auto 12px; }
+  p { color: var(--muted); max-width: 520px; margin: 0 auto; }
+}
+.orb {
+  width: 120px; height: 120px; margin: 0 auto; border-radius: 50%; background: var(--grad);
+  box-shadow: 0 0 80px rgba(139, 92, 246, 0.55); animation: float 5s ease-in-out infinite;
+}
+@keyframes float { 50% { transform: translateY(-10px) scale(1.04); } }
+
+.saved { margin-top: 18px; }
+.saved-row { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; }
+.saved-row app-trip-card { flex: none; }
+
+@media (max-width: 1200px) {
+  .layout { grid-template-columns: 320px 1fr; height: auto; }
+  app-trace-panel { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  .layout { grid-template-columns: 1fr; padding: 12px; }
+}

@@ -1,0 +1,10 @@
+/* Fondo animado */
+.aurora {
+  position: fixed; inset: -20% -10% auto; height: 80vh; z-index: -1; filter: blur(90px); opacity: 0.38;
+  background:
+    radial-gradient(40% 50% at 15% 30%, rgba(45, 212, 191, 0.55), transparent 70%),
+    radial-gradient(35% 45% at 55% 10%, rgba(139, 92, 246, 0.6), transparent 70%),
+    radial-gradient(35% 45% at 90% 35%, rgba(251, 113, 133, 0.45), transparent 70%);
+  animation: drift 18s ease-in-out infinite alternate;
+}
+@keyframes drift { to { transform: translate3d(4%, 6%, 0) scale(1.08); } }

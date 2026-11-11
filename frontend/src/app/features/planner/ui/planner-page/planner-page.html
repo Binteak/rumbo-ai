@@ -1,0 +1,47 @@
+<main class="layout">
+  <app-chat-panel
+    [messages]="chat.messages()"
+    [running]="chat.running()"
+    (messageSent)="chat.send($event)"
+    (stopped)="chat.stop()"
+    (conversationReset)="chat.newConversation()"
+  />
+
+  <div class="center">
+    @if (trips.selected(); as trip) {
+      <app-trip-detail [trip]="trip" />
+    } @else {
+      <section class="trip-empty">
+        <div class="orb"></div>
+        <h1>Planifica un viaje con un agente de IA</h1>
+        <p>
+          Rumbo razona, elige herramientas (destinos, clima, presupuesto, itinerario y guías prácticas con RAG) y guarda el
+          resultado. Pídeselo en el chat y observa la traza en la derecha.
+        </p>
+      </section>
+    }
+
+    @if (trips.trips().length) {
+      <section class="saved">
+        <p class="eyebrow">Mis viajes</p>
+        <div class="saved-row">
+          @for (t of trips.trips(); track t.id) {
+            <app-trip-card
+              [trip]="t"
+              [active]="t.id === trips.selected()?.id"
+              (selected)="trips.select(t)"
+              (removed)="trips.remove(t)"
+            />
+          }
+        </div>
+      </section>
+    }
+  </div>
+
+  <app-trace-panel
+    [trace]="chat.trace()"
+    [running]="chat.running()"
+    [tokens]="chat.tokens()"
+    [lastRun]="chat.lastRun()"
+  />
+</main>

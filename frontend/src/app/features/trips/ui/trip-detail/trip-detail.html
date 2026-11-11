@@ -1,0 +1,70 @@
+@let t = trip();
+<section class="trip">
+  <header class="hero" [style.--h1]="hue()[0]" [style.--h2]="hue()[1]">
+    <div class="hero-glow"></div>
+    <span class="flag">{{ t.flag }}</span>
+    <div>
+      <p class="eyebrow">Viaje guardado · #{{ t.id }}</p>
+      <h1>{{ t.title }}</h1>
+      <p class="summary">{{ t.summary }}</p>
+      <div class="chips">
+        <span>{{ t.days }} días</span>
+        <span>{{ t.travelers }} {{ t.travelers === 1 ? 'viajero' : 'viajeros' }}</span>
+        <span class="cap">{{ t.style }}</span>
+        @if (monthName(); as month) {
+          <span class="cap">{{ month }}</span>
+        }
+      </div>
+    </div>
+  </header>
+
+  <div class="cards">
+    <article class="card budget">
+      <p class="eyebrow">Presupuesto estimado</p>
+      <p class="big">{{ t.budget.totalEur | number }} €</p>
+      <p class="muted">{{ t.budget.totalPerPersonEur | number }} € por persona · sin vuelos</p>
+      <ul class="bars">
+        @for (row of budgetRows(); track row.key) {
+          <li>
+            <span>{{ row.label }}</span>
+            <div class="bar"><i [style.width.%]="row.share"></i></div>
+            <strong>{{ row.totalEur | number }} €</strong>
+          </li>
+        }
+      </ul>
+    </article>
+
+    <article class="card climate">
+      <p class="eyebrow">Clima</p>
+      @if (t.climate; as c) {
+        <p class="big">{{ c.avgTempC }}°<small>C</small></p>
+        <p class="muted">Media en {{ c.month }} · {{ c.rainDays }} días de lluvia</p>
+        <p class="verdict">{{ c.verdict }}</p>
+      } @else {
+        <p class="muted">Indica el mes del viaje para ver el clima.</p>
+      }
+    </article>
+  </div>
+
+  <div class="days">
+    @for (day of t.itinerary; track day.day) {
+      <article class="day" [style.animation-delay.ms]="day.day * 70">
+        <header>
+          <span class="day-n">Día {{ day.day }}</span>
+          <small>{{ dayHours(day) }} h · {{ dayCost(day) }} €</small>
+        </header>
+        @for (a of day.activities; track a.name) {
+          <div class="act">
+            <span class="slot">{{ a.slot }}</span>
+            <p>{{ a.name }}</p>
+            <div class="meta">
+              <span class="tag" [attr.data-cat]="a.category">{{ a.category }}</span>
+              <span>{{ a.area }}</span>
+              <span>{{ a.priceEur ? a.priceEur + ' €' : 'Gratis' }}</span>
+            </div>
+          </div>
+        }
+      </article>
+    }
+  </div>
+</section>

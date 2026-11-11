@@ -1,0 +1,20 @@
+<main class="page">
+  <a class="back" routerLink="/viajes">← Mis viajes</a>
+
+  @switch (trips.detailStatus()) {
+    @case ('ready') {
+      @if (trips.detail(); as trip) {
+        <app-trip-detail [trip]="trip" />
+      }
+    }
+    @case ('missing') {
+      <section class="missing">
+        <h1>Viaje no encontrado</h1>
+        <p class="muted">Puede que se haya eliminado. <a routerLink="/viajes">Vuelve a tus viajes</a>.</p>
+      </section>
+    }
+    @default {
+      <p class="muted">Cargando viaje…</p>
+    }
+  }
+</main>

@@ -1,0 +1,18 @@
+<main class="page">
+  <header class="page-head">
+    <p class="eyebrow">Historial</p>
+    <h1>Mis viajes</h1>
+  </header>
+
+  @if (trips.trips().length) {
+    <div class="grid">
+      @for (t of trips.trips(); track t.id) {
+        <app-trip-card [trip]="t" (selected)="open(t)" (removed)="trips.remove(t)" />
+      }
+    </div>
+  } @else {
+    <p class="muted">
+      Todavía no hay viajes guardados. <a routerLink="/">Planifica el primero</a> con el agente.
+    </p>
+  }
+</main>

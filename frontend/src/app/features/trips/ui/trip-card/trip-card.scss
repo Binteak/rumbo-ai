@@ -1,0 +1,10 @@
+:host { display: block; }
+
+.saved-card {
+  position: relative; display: grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: center; text-align: left;
+  width: 100%; padding: 10px 30px 10px 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); min-width: 180px; transition: 0.2s;
+  span { grid-row: span 2; font-size: 24px; }
+  small { color: var(--muted); font-size: 11.5px; }
+  &.active, &:hover { border-color: var(--violet); }
+  .del { position: absolute; top: 6px; right: 9px; font-style: normal; color: var(--muted); &:hover { color: var(--err); } }
+}

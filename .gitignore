@@ -19,3 +19,10 @@ Thumbs.db
 
 # Redis
 *.rdb
+
+# Restos temporales
+.fuse_hidden*
+*.db-journal
+
+# Configuración local de Claude Code
+.claude/

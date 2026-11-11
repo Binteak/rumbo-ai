@@ -1,0 +1,62 @@
+:host { display: block; min-height: 0; }
+.panel { height: 100%; }
+
+.live {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--teal);
+  i { width: 8px; height: 8px; border-radius: 50%; background: var(--teal); animation: pulse 1.2s infinite; }
+}
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(45, 212, 191, 0.6); } 100% { box-shadow: 0 0 0 10px rgba(45, 212, 191, 0); } }
+.metrics {
+  display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line);
+  div { padding: 12px 14px; border-right: 1px solid var(--line); &:last-child { border-right: 0; } }
+  span { display: block; font-size: 11px; color: var(--muted); }
+  strong { font: 600 17px var(--display); }
+}
+.timeline { list-style: none; margin: 0; padding: 16px 18px; overflow-y: auto; flex: 1; position: relative; }
+.placeholder { color: var(--muted); font-size: 13px; padding: 4px 0 0 4px; }
+.step {
+  position: relative; padding: 0 0 16px 26px; animation: rise 0.3s ease both;
+  &::before { content: ''; position: absolute; left: 6px; top: 16px; bottom: 0; width: 1px; background: var(--line-strong); }
+  &:last-child::before { display: none; }
+  .dot { position: absolute; left: 0; top: 4px; width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--muted); background: var(--bg); }
+  &.ok .dot { border-color: var(--ok); background: rgba(52, 211, 153, 0.25); }
+  &.error .dot { border-color: var(--err); background: rgba(248, 113, 113, 0.25); }
+  &.running .dot { border-color: var(--teal); border-top-color: transparent; animation: spin 0.8s linear infinite; }
+  &.tool .dot { border-radius: 4px; }
+  &.thinking .step-title span { color: var(--muted); font-style: italic; }
+  &.narration .step-title span { color: #c7d0e0; }
+  &.notice .step-title span { color: var(--amber); }
+  &.notice .dot { border-color: var(--amber); background: rgba(251, 191, 36, 0.25); }
+  &.final .step-title span { font-weight: 600; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.step-title { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; small { color: var(--muted); font-family: var(--mono); font-size: 11px; white-space: nowrap; } }
+.step.tool .step-title span { font-weight: 600; }
+.fn { display: inline-block; margin-top: 4px; font: 11.5px var(--mono); color: var(--teal); background: rgba(45, 212, 191, 0.08); padding: 2px 7px; border-radius: 6px; }
+.step.error .fn { color: var(--err); background: rgba(248, 113, 113, 0.1); }
+details { margin-top: 6px; font-size: 12px; }
+summary { color: var(--muted); cursor: pointer; &:hover { color: var(--text); } }
+.label { font: 10px var(--mono); text-transform: uppercase; color: var(--muted); margin: 8px 0 3px; }
+pre {
+  margin: 0; padding: 8px 10px; border-radius: 8px; background: rgba(0, 0, 0, 0.35); border: 1px solid var(--line);
+  font: 11px/1.45 var(--mono); max-height: 180px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  &.err { border-color: rgba(248, 113, 113, 0.4); color: #fecaca; }
+}
+.detail { color: var(--err); font-size: 12px; margin-top: 4px; }
+.rag { margin-top: 8px; }
+.rag-meta { margin: 0 0 6px; font: 11px var(--mono); color: var(--muted); }
+.rag-empty { margin: 0; font-size: 12px; color: var(--amber); }
+.sources {
+  list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px;
+  li { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(139, 92, 246, 0.06); }
+  p { margin: 4px 0; font-size: 12px; color: #c7d0e0; line-height: 1.45; }
+  small { font: 10.5px var(--mono); color: var(--muted); }
+}
+.source-head {
+  display: flex; justify-content: space-between; gap: 8px; font-size: 12px;
+  strong { font-weight: 600; }
+}
+.ranks {
+  display: flex; gap: 4px; white-space: nowrap;
+  i { font: normal 10px var(--mono); color: var(--teal); background: rgba(45, 212, 191, 0.08); padding: 1px 6px; border-radius: 6px; }
+}
