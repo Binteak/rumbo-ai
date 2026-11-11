@@ -46,9 +46,13 @@ export function isRealAvailable(usage: Usage | null, health: Health | null): boo
   return !!provider && provider !== DEMO_PROVIDER;
 }
 
-/** Modo con el que se enviará el próximo mensaje. */
-export function resolveMode(realAvailable: boolean, preferred: ChatMode): ChatMode {
-  return realAvailable && preferred === 'real' ? 'real' : 'demo';
+/** Modo con el que se enviará el próximo mensaje. Con `demoOnly` (versión móvil) siempre es demo. */
+export function resolveMode(
+  realAvailable: boolean,
+  preferred: ChatMode,
+  demoOnly = false,
+): ChatMode {
+  return !demoOnly && realAvailable && preferred === 'real' ? 'real' : 'demo';
 }
 
 /** True si la próxima respuesta será del modo demo: por elección, sin modelo o con el cupo agotado. */

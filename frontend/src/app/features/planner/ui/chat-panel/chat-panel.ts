@@ -1,4 +1,15 @@
-import { Component, ElementRef, effect, input, output, signal, viewChild } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  ElementRef,
+  afterNextRender,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ChatMessage } from '../../domain/run';
 
@@ -18,6 +29,8 @@ export class ChatPanel {
   readonly conversationReset = output<void>();
 
   protected readonly draft = signal('');
+  /** Queda contenido por debajo de lo visible: se avisa con un botón para bajar. */
+  protected readonly hasMore = signal(false);
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
 
   protected readonly suggestions = [
@@ -29,15 +42,35 @@ export class ChatPanel {
   ];
 
   constructor() {
-    // Baja al último mensaje cada vez que cambia la conversación.
+    // Baja al último mensaje cada vez que cambia la conversación (sin mensajes, se queda arriba).
     effect(() => {
-      this.messages();
+      const chatting = this.messages().length > 0;
       this.running();
       queueMicrotask(() => {
-        const el = this.scroller()?.nativeElement;
-        if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+        if (chatting) this.scrollToEnd();
+        this.checkMore();
       });
     });
+
+    // El espacio disponible cambia al girar el móvil, abrir el teclado o volver a esta pestaña.
+    const destroyRef = inject(DestroyRef);
+    afterNextRender(() => {
+      const el = this.scroller()?.nativeElement;
+      if (!el || typeof ResizeObserver !== 'function') return;
+      const observer = new ResizeObserver(() => this.checkMore());
+      observer.observe(el);
+      destroyRef.onDestroy(() => observer.disconnect());
+    });
+  }
+
+  protected scrollToEnd(): void {
+    const el = this.scroller()?.nativeElement;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }
+
+  protected checkMore(): void {
+    const el = this.scroller()?.nativeElement;
+    if (el) this.hasMore.set(el.scrollHeight - el.scrollTop - el.clientHeight > 24);
   }
 
   protected send(text: string): void {

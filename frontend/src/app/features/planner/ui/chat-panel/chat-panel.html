@@ -7,7 +7,8 @@
     <button class="ghost" (click)="conversationReset.emit()" [disabled]="!messages().length">Nueva</button>
   </header>
 
-  <div class="messages" #scroller>
+  <div class="messages-wrap" [class.has-more]="hasMore()">
+  <div class="messages" #scroller (scroll)="checkMore()">
     @if (!messages().length) {
       <div class="empty">
         <p>Describe tu viaje con tus palabras. El agente decidirá qué herramientas usar y verás cada paso en directo.</p>
@@ -33,6 +34,12 @@
         <span class="avatar">R</span>
         <p class="typing"><i></i><i></i><i></i></p>
       </div>
+    }
+  </div>
+    @if (hasMore()) {
+      <button type="button" class="more" (click)="scrollToEnd()">
+        <span aria-hidden="true">↓</span> Hay más abajo
+      </button>
     }
   </div>
 

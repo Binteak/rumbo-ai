@@ -21,7 +21,7 @@
     </div>
   }
 
-  @if (status.realAvailable()) {
+  @if (status.realAvailable() && !status.demoOnly()) {
     <div class="mode-switch" role="group" aria-label="Modo del agente">
       <button
         type="button"
@@ -54,7 +54,7 @@
         @if (u?.remaining; as r) {
           · te quedan {{ r.hour }}
         }
-      } @else if (status.preferredMode() === 'demo' && status.realAvailable()) {
+      } @else if ((status.demoOnly() || status.preferredMode() === 'demo') && status.realAvailable()) {
         <i></i>Modo demo · sin coste
       } @else if (u && u.provider !== demoProvider) {
         <i></i>Modo demo · cupo de IA real agotado
@@ -65,4 +65,34 @@
   } @else {
     <span class="mode off"><i></i>Backend desconectado</span>
   }
+
+  <div class="info" #info>
+    <button
+      type="button"
+      class="info-btn"
+      aria-label="Información sobre el servicio"
+      aria-controls="info-panel"
+      [attr.aria-expanded]="infoOpen()"
+      (click)="infoOpen.set(!infoOpen())"
+    >
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <circle cx="12" cy="12" r="9.25" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <circle cx="12" cy="7.8" r="1.1" fill="currentColor" />
+        <path d="M12 11v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+      </svg>
+    </button>
+    @if (infoOpen()) {
+      <div class="info-panel" id="info-panel" role="dialog" aria-label="Información sobre el servicio">
+        <strong>¿La app no responde?</strong>
+        <p>
+          El backend está en un plan gratuito y se suspende por inactividad, sobre todo a partir de las 19:00. Si ves
+          «Backend desconectado» o el agente no contesta, refresca la página y espera unos segundos a que despierte.
+        </p>
+        @if (status.demoOnly()) {
+          <p class="info-note">En el móvil Rumbo funciona solo en modo demo. La IA real está disponible en escritorio.</p>
+        }
+        <button type="button" class="info-reload" (click)="reload()">Refrescar página</button>
+      </div>
+    }
+  </div>
 </header>

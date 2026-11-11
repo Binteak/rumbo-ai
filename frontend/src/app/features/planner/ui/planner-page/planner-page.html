@@ -1,4 +1,21 @@
-<main class="layout">
+<main class="layout" [attr.data-tab]="tab()">
+  <!-- Solo en móvil: cada vista ocupa la pantalla y se cambia con estas pestañas. -->
+  <nav class="tabs" role="tablist" aria-label="Vistas del planificador">
+    <button type="button" role="tab" [attr.aria-selected]="tab() === 'chat'" (click)="show('chat')">Chat</button>
+    <button type="button" role="tab" [attr.aria-selected]="tab() === 'trip'" (click)="show('trip')">
+      Viaje
+      @if (tripUnseen()) {
+        <i class="badge" title="Hay un viaje nuevo"></i>
+      }
+    </button>
+    <button type="button" role="tab" [attr.aria-selected]="tab() === 'trace'" (click)="show('trace')">
+      Traza
+      @if (chat.running()) {
+        <i class="badge live" title="El agente está trabajando"></i>
+      }
+    </button>
+  </nav>
+
   <app-chat-panel
     [messages]="chat.messages()"
     [running]="chat.running()"
@@ -16,7 +33,7 @@
         <h1>Planifica un viaje con un agente de IA</h1>
         <p>
           Rumbo razona, elige herramientas (destinos, clima, presupuesto, itinerario y guías prácticas con RAG) y guarda el
-          resultado. Pídeselo en el chat y observa la traza en la derecha.
+          resultado. Pídeselo en el chat y observa la traza del agente.
         </p>
       </section>
     }

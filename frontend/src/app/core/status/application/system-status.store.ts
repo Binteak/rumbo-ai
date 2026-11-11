@@ -10,6 +10,7 @@ import {
   resolveMode,
   shortModelName,
 } from '../domain/system-status';
+import { Viewport } from '../../viewport/viewport';
 import { PreferencesStorage } from './preferences.storage';
 import { StatusGateway } from './status.gateway';
 
@@ -18,6 +19,7 @@ import { StatusGateway } from './status.gateway';
 export class SystemStatusStore {
   private readonly gateway = inject(StatusGateway);
   private readonly preferences = inject(PreferencesStorage);
+  private readonly viewport = inject(Viewport);
 
   readonly health = signal<Health | null>(null);
   readonly usage = signal<Usage | null>(null);
@@ -27,7 +29,11 @@ export class SystemStatusStore {
 
   readonly provider = computed(() => currentProvider(this.usage(), this.health()));
   readonly realAvailable = computed(() => isRealAvailable(this.usage(), this.health()));
-  readonly effectiveMode = computed(() => resolveMode(this.realAvailable(), this.preferredMode()));
+  /** En el móvil solo se ofrece el modo demo: la IA real queda para escritorio. */
+  readonly demoOnly = this.viewport.isMobile;
+  readonly effectiveMode = computed(() =>
+    resolveMode(this.realAvailable(), this.preferredMode(), this.demoOnly()),
+  );
   readonly isDemo = computed(() =>
     answersInDemo(this.effectiveMode(), this.usage(), this.health()),
   );

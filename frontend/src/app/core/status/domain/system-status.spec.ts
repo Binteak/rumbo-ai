@@ -28,6 +28,7 @@ describe('reglas del estado del servicio', () => {
     expect(resolveMode(true, 'real')).toBe('real');
     expect(resolveMode(true, 'demo')).toBe('demo');
     expect(resolveMode(false, 'real')).toBe('demo');
+    expect(resolveMode(true, 'real', true)).toBe('demo');
   });
 
   it('responde en demo por elección, por cupo agotado o por no haber modelo', () => {

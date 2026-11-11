@@ -1,6 +1,6 @@
 import { registerLocaleData } from '@angular/common';
 import localeEs from '@angular/common/locales/es';
-import { LOCALE_ID } from '@angular/core';
+import { LOCALE_ID, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
@@ -8,6 +8,7 @@ import { PreferencesStorage } from '../../core/status/application/preferences.st
 import { StatusGateway } from '../../core/status/application/status.gateway';
 import { SystemStatusStore } from '../../core/status/application/system-status.store';
 import { GlobalStats, Health, Usage } from '../../core/status/domain/system-status';
+import { Viewport } from '../../core/viewport/viewport';
 import { AgentGateway } from '../../features/planner/application/agent.gateway';
 import { TripRepository } from '../../features/trips/application/trip.repository';
 import { providerLabel } from './provider-label';
@@ -31,7 +32,7 @@ describe('Topbar', () => {
   let el: HTMLElement;
   let saved: string[];
 
-  async function render(health: Health | null, usage: Usage | null): Promise<void> {
+  async function render(health: Health | null, usage: Usage | null, mobile = false): Promise<void> {
     saved = [];
     const down = () => throwError(() => new Error('sin red'));
     TestBed.configureTestingModule({
@@ -50,6 +51,7 @@ describe('Topbar', () => {
           provide: PreferencesStorage,
           useValue: { loadMode: () => 'real', saveMode: (m: string) => saved.push(m) },
         },
+        { provide: Viewport, useValue: { isMobile: signal(mobile) } },
         { provide: AgentGateway, useValue: {} },
         { provide: TripRepository, useValue: {} },
       ],
@@ -138,6 +140,35 @@ describe('Topbar', () => {
 
     expect(el.querySelector('.mode-switch')).toBeNull();
     expect(mode()).toBe('Modo demo · rumbo-demo');
+  });
+
+  it('en el móvil solo ofrece el modo demo aunque haya IA real', async () => {
+    await render(
+      { status: 'ok', provider: 'groq', model: 'openai/gpt-oss-120b' },
+      { provider: 'groq', model: 'openai/gpt-oss-120b', realAi: true, remaining: { hour: 4, day: 12 } },
+      true,
+    );
+
+    expect(el.querySelector('.mode-switch')).toBeNull();
+    expect(mode()).toBe('Modo demo · sin coste');
+    expect(TestBed.inject(SystemStatusStore).effectiveMode()).toBe('demo');
+  });
+
+  it('el botón de información explica que el backend se duerme y se cierra al pulsar fuera', async () => {
+    await render({ status: 'ok', provider: 'demo', model: 'rumbo-demo' }, null);
+    expect(el.querySelector('.info-panel')).toBeNull();
+
+    el.querySelector<HTMLButtonElement>('.info-btn')!.click();
+    await fixture.whenStable();
+
+    const panel = el.querySelector('.info-panel')!;
+    expect(panel.textContent).toContain('refresca la página');
+    expect(panel.textContent).toContain('19:00');
+    expect(panel.querySelector('.info-reload')).not.toBeNull();
+
+    document.body.click();
+    await fixture.whenStable();
+    expect(el.querySelector('.info-panel')).toBeNull();
   });
 
   it('indica que el backend no responde', async () => {
