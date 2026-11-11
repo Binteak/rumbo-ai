@@ -58,29 +58,48 @@ app = FastAPI(
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_list, allow_methods=["*"], allow_headers=["*"])
 
 
-def build_real_provider() -> ModelProvider | None:
-    """Modelo real configurado (Claude o uno gratuito compatible con OpenAI), o None para el modo demo."""
-    if settings.llm_provider == "claude":
-        return AnthropicProvider(settings.anthropic_api_key, settings.agent_model, settings.agent_effort)
-    if settings.llm_provider == "gemini":
-        return OpenAICompatibleProvider(
-            settings.gemini_api_key,
-            settings.gemini_model,
-            settings.gemini_base_url,
-            name="gemini",
-            max_tokens=settings.llm_max_output_tokens,
-        )
-    if settings.llm_provider == "groq":
-        return OpenAICompatibleProvider(
-            settings.groq_api_key, settings.groq_model, settings.groq_base_url, max_tokens=settings.llm_max_output_tokens
-        )
-    return None
+def build_real_providers() -> list[ModelProvider]:
+    """Cadena de modelos reales configurados, en orden de prioridad. Vacía: modo demo."""
+    chain: list[ModelProvider] = []
+    for name in settings.llm_chain:
+        if name == "claude":
+            chain.append(AnthropicProvider(settings.anthropic_api_key, settings.agent_model, settings.agent_effort))
+        elif name == "gemini":
+            chain.append(
+                OpenAICompatibleProvider(
+                    settings.gemini_api_key,
+                    settings.gemini_model,
+                    settings.gemini_base_url,
+                    name="gemini",
+                    max_tokens=settings.llm_max_output_tokens,
+                )
+            )
+        elif name == "groq":
+            chain.append(
+                OpenAICompatibleProvider(
+                    settings.groq_api_key,
+                    settings.groq_model,
+                    settings.groq_base_url,
+                    max_tokens=settings.llm_max_output_tokens,
+                )
+            )
+        elif name == "extra":
+            chain.append(
+                OpenAICompatibleProvider(
+                    settings.extra_llm_api_key,
+                    settings.extra_llm_model,
+                    settings.extra_llm_base_url,
+                    name=settings.extra_llm_name,
+                    max_tokens=settings.llm_max_output_tokens,
+                )
+            )
+    return chain
 
 
-real_provider = build_real_provider()
+real_providers = build_real_providers()
 demo_provider = DemoProvider(delay_s=settings.demo_delay_ms / 1000)
-# Para /api/health y la cabecera: el proveedor principal de esta instancia.
-provider: ModelProvider = real_provider or demo_provider
+# Para /api/health: el proveedor principal de esta instancia.
+provider: ModelProvider = real_providers[0] if real_providers else demo_provider
 
 # Historial por sesión: en memoria en local, en Redis cuando hay varias réplicas.
 sessions = build_session_store(settings.redis_url)
@@ -97,18 +116,26 @@ limits = build_limits(
 )
 
 
+def available_providers() -> list[ModelProvider]:
+    """Proveedores de la cadena que no están en pausa por cuota o por no responder."""
+    return [p for p in real_providers if not limits.cooling_down(p.name)]
+
+
 def provider_for_run(ip: str) -> tuple[ModelProvider, str | None]:
     """Decide qué modelo atiende esta petición y, si es el demo por un límite, por qué."""
-    if real_provider is None:
+    if not real_providers:
         return demo_provider, None
+    chain = available_providers()
     if not limits.can_start_run():
         return demo_provider, "Hoy se ha agotado el presupuesto de IA real de Rumbo: respondo en modo demo."
+    if not chain:
+        return demo_provider, "Los modelos gratuitos de Rumbo han agotado su cuota por ahora: respondo en modo demo."
     if not limits.take_ip_quota(ip):
         return demo_provider, (
             f"Has usado tus consultas con IA real ({limits.config.llm_per_hour} por hora, "
             f"{limits.config.llm_per_day} al día): respondo en modo demo."
         )
-    return GuardedProvider(real_provider, demo_provider, limits), None
+    return GuardedProvider(chain, demo_provider, limits), None
 
 
 def trip_to_dict(t: Trip) -> dict:
@@ -208,13 +235,17 @@ def rag_search(
 def usage(request: Request) -> dict:
     """Modo con el que se responderá a quien pregunta y cuántas consultas con IA real le quedan."""
     ip = client_ip(request.headers, request.client.host if request.client else None)
-    if real_provider is None:
+    if not real_providers:
         return {"mode": "demo", "model": demo_provider.model, "real_ai": False}
     mine = limits.ip_remaining(ip)
+    chain = available_providers()
+    # El primero disponible es el que atenderá la próxima consulta.
+    current = chain[0] if chain else real_providers[0]
     return {
-        "mode": real_provider.name,
-        "model": real_provider.model,
-        "real_ai": limits.can_start_run() and min(mine.values()) > 0,
+        "mode": current.name,
+        "model": current.model,
+        "chain": [p.name for p in real_providers],
+        "real_ai": bool(chain) and limits.can_start_run() and min(mine.values()) > 0,
         "remaining": mine,
         **limits.status(),
     }

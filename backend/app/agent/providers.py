@@ -5,8 +5,9 @@ un `ModelTurn` normalizado. Así se puede cambiar de modelo, o usar el modo demo
 sin API key, sin tocar el loop.
 
 - `AnthropicProvider`: Claude.
-- `OpenAICompatibleProvider`: cualquier API compatible con OpenAI (Groq, Gemini,
-  OpenRouter...). Con el plan gratuito de Groq permite usar un modelo real sin coste.
+- `OpenAICompatibleProvider`: cualquier API compatible con OpenAI (Gemini, Groq,
+  Hugging Face, OpenRouter, DeepSeek...). Con sus planes gratuitos permite usar un modelo
+  real sin coste.
 
 El historial se guarda siempre en formato de bloques de Anthropic (text, tool_use,
 tool_result); cada proveedor lo traduce a su API. Por eso se puede cambiar de proveedor,
@@ -135,7 +136,7 @@ def to_openai_tools(tools: list[dict]) -> list[dict]:
     ]
 
 
-def to_openai_messages(system: str, messages: list[dict]) -> list[dict]:
+def to_openai_messages(system: str, messages: list[dict], keep_extra: bool = True) -> list[dict]:
     """Traduce el historial (bloques de Anthropic) al formato de chat de OpenAI."""
     out: list[dict] = [{"role": "system", "content": system}]
     for m in messages:
@@ -169,8 +170,9 @@ def to_openai_messages(system: str, messages: list[dict]) -> list[dict]:
                 "type": "function",
                 "function": {"name": b["name"], "arguments": json.dumps(b.get("input", {}), ensure_ascii=False)},
             }
-            # Gemini 3 exige reenviar la "thought signature" que acompañaba a la llamada.
-            if b.get("extra_content"):
+            # Gemini 3 exige reenviar la "thought signature" que acompañaba a la llamada. Otros
+            # proveedores pueden rechazar el campo, así que solo se envía a Gemini.
+            if keep_extra and b.get("extra_content"):
                 call["extra_content"] = b["extra_content"]
             calls.append(call)
         msg: dict[str, Any] = {"role": "assistant", "content": text or None}
@@ -224,7 +226,7 @@ class OpenAICompatibleProvider:
     def _payload(self, system: str, tools: list[dict], messages: list[dict]) -> dict:
         payload: dict[str, Any] = {
             "model": self.model,
-            "messages": to_openai_messages(system, messages),
+            "messages": to_openai_messages(system, messages, keep_extra=self.model.startswith("gemini")),
             "tools": to_openai_tools(tools),
             "tool_choice": "auto",
             "max_tokens": self.max_tokens,
@@ -240,6 +242,12 @@ class OpenAICompatibleProvider:
             r = self._post(payload)
             if r.status_code == 429:
                 raise RateLimited(_retry_after(r), r.text[:300])
+            # 402: créditos gratuitos agotados (Hugging Face, OpenRouter...). Se pausa una hora.
+            if r.status_code == 402:
+                raise RateLimited(3600, r.text[:300])
+            # Clave inválida o sin permisos: que la cadena siga con el siguiente proveedor.
+            if r.status_code in (401, 403):
+                raise ProviderUnavailable(f"{self.name} rechaza la clave (HTTP {r.status_code})")
             # Algunos modelos abiertos generan a veces una llamada a herramienta mal formada
             # (Groq responde 400 "tool_use_failed"): se reintenta una vez.
             if r.status_code == 400 and "tool_use_failed" in r.text and attempt == 0:
