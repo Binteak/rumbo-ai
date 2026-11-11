@@ -1,8 +1,8 @@
 # Rumbo · Agente de viajes con IA
 
-Agente de IA que **planifica viajes completos** (destino, clima, presupuesto e itinerario) y **resuelve dudas prácticas** (visados, transporte, propinas, seguridad...) con RAG sobre guías propias, citando la fuente. Está construido con un **loop agéntico escrito a mano**, sin frameworks, y funciona con Claude, con modelos gratuitos (Gemini o Groq) o en modo demo sin coste. La interfaz muestra en directo cómo razona el agente: cada herramienta que decide usar, sus argumentos, el resultado y cuánto tarda.
+Agente de IA que **planifica viajes completos** (destino, clima, presupuesto e itinerario) y **resuelve dudas prácticas** (visados, transporte, propinas, seguridad...) con RAG sobre guías propias, citando la fuente. Está construido con un **loop agéntico escrito a mano**, sin frameworks, y funciona con Claude o con una cadena de modelos gratuitos (Gemini → Groq → Hugging Face u otro compatible con OpenAI) y, si todos agotan su cuota, en modo demo sin coste. La interfaz muestra en directo cómo razona el agente: cada herramienta que decide usar, sus argumentos, el resultado y cuánto tarda.
 
-**Angular 22 · TypeScript · Python · FastAPI · Claude, Gemini y Groq (tool calling) · RAG (BM25 + embeddings, pgvector) · PostgreSQL · Redis · Server-Sent Events · Docker · Kubernetes · GitHub Actions**
+**Angular 22 · TypeScript · Python · FastAPI · Claude, Gemini, Groq y Hugging Face (tool calling) · RAG (BM25 + embeddings, pgvector) · PostgreSQL · Redis · Server-Sent Events · Docker · Kubernetes · GitHub Actions**
 
 ![Rumbo](docs/screenshot.png)
 
@@ -21,7 +21,7 @@ Agente de IA que **planifica viajes completos** (destino, clima, presupuesto e i
 |---|---|
 | Frontend | Angular 22 (signals, componentes standalone), TypeScript, SCSS, streaming con `fetch` + `ReadableStream` |
 | Backend | Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2.0, Server-Sent Events |
-| IA | Loop agéntico propio con tool calling; Claude (Anthropic), Gemini y Groq vía API compatible con OpenAI; modo demo sin modelo |
+| IA | Loop agéntico propio con tool calling; Claude (Anthropic) y una cadena de modelos gratuitos con API compatible con OpenAI (Gemini → Groq → Hugging Face, OpenRouter o DeepSeek); modo demo sin modelo |
 | RAG | Chunking por secciones, BM25 + embeddings (Voyage AI o local) fusionados con RRF, pgvector, evals de recuperación |
 | Datos | PostgreSQL + pgvector (SQLite en local), Redis para sesiones, bloqueos y límites de uso |
 | Infra | Docker multi-stage, Docker Compose, Kubernetes (kustomize, HPA, Ingress, probes), nginx, Render |
@@ -31,7 +31,7 @@ Agente de IA que **planifica viajes completos** (destino, clima, presupuesto e i
 
 - **Agente con herramientas sin frameworks.** El loop (modelo → herramientas → resultados → modelo) está implementado a mano en `backend/app/agent/loop.py`, sin LangChain, para controlar cada paso: límite de iteraciones, errores que vuelven al modelo para que se corrija y un historial que solo se guarda si el turno termina bien.
 - **RAG híbrido hecho a mano.** Búsqueda BM25 + embeddings fusionada con Reciprocal Rank Fusion, vectores en PostgreSQL/pgvector, citas de la fuente en cada respuesta y evals de recuperación que bloquean la CI si la calidad baja. Detalles en [RAG](#rag-guías-prácticas-de-cada-destino).
-- **Proveedor de modelo intercambiable.** El loop habla con una interfaz `ModelProvider` con tres implementaciones: Claude (`AnthropicProvider`), cualquier API compatible con OpenAI como Gemini o Groq (`OpenAICompatibleProvider`) y un **modo demo** sin API key. El historial se guarda en un formato neutro, así que se puede cambiar de proveedor a mitad de una conversación.
+- **Proveedor de modelo intercambiable.** El loop habla con una interfaz `ModelProvider` con tres implementaciones: Claude (`AnthropicProvider`), cualquier API compatible con OpenAI como Gemini, Groq o Hugging Face (`OpenAICompatibleProvider`) y un **modo demo** sin API key. Los proveedores configurados forman una **cadena**: si uno agota su cuota o no responde, el turno sigue con el siguiente sin que el usuario note nada más que un aviso. El historial se guarda en un formato neutro, así que se puede cambiar de proveedor a mitad de una conversación.
 - **IA real gratis y sin sorpresas.** Anti-flood por IP, cupo de IA real por persona y presupuesto diario de tokens por debajo de la cuota gratuita, con paso automático al modo demo. Detalles en [Modelo gratuito y protección](#modelo-gratuito-y-protección-frente-a-abusos).
 - **Guardarraíles: el servidor no confía en el modelo para lo importante.** El viaje se recalcula en el servidor en lugar de usar datos largos generados por el modelo; si el modelo genera el itinerario pero olvida guardarlo, lo guarda el servidor; el agente rechaza los temas ajenos a los viajes. Detalles en [Guardarraíles](#guardarraíles).
 - **Herramientas tipadas con Pydantic.** Cada herramienta se define una vez con un modelo Pydantic: de ahí sale el JSON Schema que ve el modelo y la validación de lo que devuelve. Si el modelo envía argumentos inválidos, recibe el error y reintenta.
@@ -39,7 +39,7 @@ Agente de IA que **planifica viajes completos** (destino, clima, presupuesto e i
 - **Observabilidad.** Cada ejecución guarda pasos, llamadas a herramientas, errores, tokens y duración (`/api/stats`). La traza muestra cada paso en directo y la cabecera, la tasa de éxito, el consumo y el modo activo.
 - **Backend sin estado, listo para escalar.** El historial de cada conversación, su bloqueo y los contadores de uso viven en Redis, y los datos en PostgreSQL. Cualquier réplica puede atender el siguiente mensaje, así que el backend escala horizontalmente. Probado con 3 réplicas atendiendo la misma conversación.
 - **Preparado para Kubernetes.** Probes de liveness (`/api/health`) y readiness (`/api/ready`, que comprueba PostgreSQL y Redis), recursos limitados, usuario sin privilegios, autoescalado (HPA), Ingress con streaming y creación de tablas segura con varias réplicas arrancando a la vez (advisory lock de PostgreSQL).
-- **Calidad.** 75 tests de backend (pytest) y 4 de frontend (Vitest), evals del RAG, lint con Ruff, validación de manifiestos con kubeconform y CI en GitHub Actions. Los cambios entran por Pull Request con la CI en verde.
+- **Calidad.** 90 tests de backend (pytest) y 6 de frontend (Vitest), evals del RAG, lint con Ruff, validación de manifiestos con kubeconform y CI en GitHub Actions. Los cambios entran por Pull Request con la CI en verde.
 
 ## Arquitectura
 
@@ -57,7 +57,7 @@ flowchart LR
     Loop --> Guard[Modelo protegido · presupuesto y fallback]
     Guard --> Provider{ModelProvider}
     Provider --> Claude[Claude]
-    Provider --> OAI[Gemini / Groq]
+    Provider --> OAI[Gemini → Groq → extra]
     Provider --> Demo[Modo demo]
     Loop --> Tools[Herramientas Pydantic]
     Tools --> Data[(Destinos)]
@@ -112,9 +112,20 @@ Documentación interactiva (OpenAPI) en `/docs` al arrancar el backend.
 
 ## Modelo gratuito y protección frente a abusos
 
-Para que la demo pública use un modelo real **sin coste**, Rumbo puede usar el plan gratuito de [Gemini](https://aistudio.google.com) o de [Groq](https://console.groq.com), ambos sin tarjeta, a través de `OpenAICompatibleProvider`. El proveedor se elige por variables de entorno, por prioridad: `ANTHROPIC_API_KEY` → Claude, `GEMINI_API_KEY` → Gemini (`gemini-flash-latest`), `GROQ_API_KEY` → Groq (`openai/gpt-oss-120b`) y, sin ninguna, modo demo.
+Para que la demo pública use un modelo real **sin coste**, Rumbo encadena planes gratuitos a través de `OpenAICompatibleProvider`. Se usan todos los proveedores que tengan clave, en este orden:
 
-- **Gemini 3:** las llamadas a herramientas llevan una *thought signature* que hay que reenviar en el siguiente turno; el proveedor la conserva en el historial.
+| Orden | Proveedor | Variables | Modelo por defecto |
+|---|---|---|---|
+| 1 | Claude (de pago, opcional) | `ANTHROPIC_API_KEY`, `AGENT_MODEL` | `claude-sonnet-5-5` |
+| 2 | [Gemini](https://aistudio.google.com) (gratis, sin tarjeta) | `GEMINI_API_KEY`, `GEMINI_MODEL` | `gemini-flash-latest` |
+| 3 | [Groq](https://console.groq.com) (gratis, sin tarjeta) | `GROQ_API_KEY`, `GROQ_MODEL` | `openai/gpt-oss-120b` |
+| 4 | Extra: cualquier API compatible con OpenAI | `EXTRA_LLM_API_KEY`, `EXTRA_LLM_NAME`, `EXTRA_LLM_BASE_URL`, `EXTRA_LLM_MODEL` | Hugging Face (`https://router.huggingface.co/v1`), `openai/gpt-oss-120b` |
+| — | Modo demo | — | Sin coste |
+
+- **Paso al siguiente:** si un proveedor agota su cuota (429 con espera larga o 402 sin créditos), no responde (5xx, timeouts) o rechaza la clave (401/403), entra en pausa por su cuenta (`cooldown` por proveedor) y el turno sigue con el siguiente; la traza lo avisa ("Gemini ha alcanzado su cuota gratuita: continúo con Groq"). Las peticiones nuevas empiezan directamente por el primero que no esté en pausa.
+- **Proveedor extra:** por defecto el router de [Hugging Face](https://huggingface.co/docs/inference-providers) (token con permiso *Inference Providers*). Para otro, cambia la URL, el modelo y el nombre: por ejemplo OpenRouter (`https://openrouter.ai/api/v1`, con sus modelos `:free`) o DeepSeek (`https://api.deepseek.com`). Ojo: los créditos gratuitos de Hugging Face son pequeños y la API de DeepSeek es de pago por uso, así que conviene dejarlo como último recurso.
+
+- **Gemini 3:** las llamadas a herramientas llevan una *thought signature* que hay que reenviar en el siguiente turno; el proveedor la conserva en el historial y solo la envía a Gemini (otros proveedores podrían rechazar el campo).
 - **Menos tokens por consulta:** el modelo recibe una vista compacta de los resultados grandes (el itinerario pasa de ~1.400 a ~500 caracteres), mientras que la interfaz recibe el detalle completo. Como cada resultado se reenvía en todas las llamadas siguientes del turno, el ahorro se multiplica.
 - **Razonamiento en nivel bajo** (`reasoning_effort: low`) para no gastar cuota en tokens de razonamiento.
 
@@ -124,11 +135,11 @@ Sin método de pago en el proveedor no hay factura posible. Además, la app se p
 |---|---|---|---|
 | Anti-flood por IP | Más peticiones por minuto de las permitidas → HTTP 429 | 20 / minuto | `RATE_LIMIT_FLOOD_PER_MINUTE` |
 | Cupo de IA real por IP | Al agotarlo, esa persona sigue usando Rumbo **en modo demo**, con un aviso | 5 / hora, 15 / día | `RATE_LIMIT_LLM_PER_HOUR`, `RATE_LIMIT_LLM_PER_DAY` |
-| Presupuesto global de tokens | Al agotarlo, todo el mundo pasa al modo demo | 180.000 / día | `LLM_DAILY_TOKEN_BUDGET` |
+| Presupuesto global de tokens | Al agotarlo, todo el mundo pasa al modo demo (es un tope total para toda la cadena) | 180.000 / día | `LLM_DAILY_TOKEN_BUDGET` |
 
 - La IP real se obtiene de `CF-Connecting-IP` detrás de Cloudflare (Render) o de la última entrada de `X-Forwarded-For` detrás de un proxy propio (nginx, Ingress). Aunque alguien falseara la cabecera, el presupuesto global sigue limitando el gasto total.
 - Los tokens servidos desde la caché del proveedor no se descuentan, porque el proveedor tampoco los cuenta en sus cuotas.
-- Si el proveedor responde 429 con una espera corta (límite por minuto), el agente espera y reintenta; si la espera es larga, se activa un *cooldown* global y el turno continúa en modo demo sin error (`app/agent/guard.py`).
+- Si el proveedor responde 429 con una espera corta (límite por minuto), el agente espera y reintenta; si la espera es larga, ese proveedor entra en *cooldown* y el turno continúa con el siguiente de la cadena o, si no quedan, en modo demo, sin error (`app/agent/guard.py`).
 - Los contadores van en Redis si hay `REDIS_URL` (compartidos entre réplicas) y en memoria si no.
 - La cabecera muestra "IA real · modelo · te quedan N" o "Modo demo", y los avisos aparecen en el chat y en la traza.
 
@@ -219,13 +230,13 @@ npm install
 npm start                       # http://localhost:4200
 ```
 
-Sin claves en `backend/.env` arranca en **modo demo**. Con `ANTHROPIC_API_KEY` usa Claude (`AGENT_MODEL`, por defecto `claude-sonnet-5-5`); con `GEMINI_API_KEY`, Gemini gratis (`GEMINI_MODEL`, por defecto `gemini-flash-latest`); con `GROQ_API_KEY`, Groq gratis (`GROQ_MODEL`, por defecto `openai/gpt-oss-120b`).
+Sin claves en `backend/.env` arranca en **modo demo**. Con una o varias claves (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `EXTRA_LLM_API_KEY`) usa esos proveedores en cadena, en ese orden (ver [Modelo gratuito](#modelo-gratuito-y-protección-frente-a-abusos)).
 
 En local no hace falta nada más: sin `DATABASE_URL` usa SQLite y sin `REDIS_URL` guarda las sesiones y los contadores en memoria.
 
 ### Despliegue en Render (demo pública)
 
-- **Backend:** Web Service con el código de `backend/` (su `Dockerfile`, o `pip install -r requirements.txt` y `uvicorn app.main:app --host 0.0.0.0 --port $PORT`). Variables: `GEMINI_API_KEY` (o `GROQ_API_KEY`), `CORS_ORIGINS` con la URL del frontend y, opcionalmente, los límites de uso. **No** definas `ANTHROPIC_API_KEY` ni `AGENT_MODE=demo` si quieres el modelo gratuito.
+- **Backend:** Web Service con el código de `backend/` (su `Dockerfile`, o `pip install -r requirements.txt` y `uvicorn app.main:app --host 0.0.0.0 --port $PORT`). Variables: las claves de la cadena que quieras usar (`GEMINI_API_KEY`, `GROQ_API_KEY`, `EXTRA_LLM_API_KEY`), `CORS_ORIGINS` con la URL del frontend y, opcionalmente, los límites de uso. **No** definas `ANTHROPIC_API_KEY` ni `AGENT_MODE=demo` si quieres el modelo gratuito.
 - **Frontend:** Static Site con `npx ng build --configuration render`, que apunta la API al backend desplegado (`src/environments/environment.render.ts`).
 - En el plan gratuito, la base de datos SQLite se pierde al reiniciar o desplegar, y el RAG se reindexa en memoria al arrancar (milisegundos).
 
@@ -256,6 +267,7 @@ kubectl -n rumbo create secret generic rumbo-secrets \
   --from-literal=ANTHROPIC_API_KEY= \
   --from-literal=GEMINI_API_KEY= \
   --from-literal=GROQ_API_KEY= \
+  --from-literal=EXTRA_LLM_API_KEY= \
   --from-literal=VOYAGE_API_KEY= \
   --from-literal=POSTGRES_PASSWORD=cambia-esto \
   --from-literal=DATABASE_URL=postgresql+psycopg://rumbo:cambia-esto@postgres:5432/rumbo
@@ -296,7 +308,7 @@ cd frontend && npx ng test --watch=false
 Ningún test llama a un modelo real: se usan proveedores falsos con turnos predefinidos y transportes HTTP simulados con el formato de cada API.
 
 - **Agente:** autocorrección tras un error de herramienta, límite de iteraciones, historial intacto si la API falla, guardado del viaje por el servidor y rechazo de temas ajenos.
-- **Proveedores:** traducción del historial al formato de OpenAI, tool calls, *thought signatures* de Gemini, 429 con `retry-after` en cabecera y en el mensaje, y reintento ante llamadas mal formadas.
+- **Proveedores:** traducción del historial al formato de OpenAI, tool calls, *thought signatures* de Gemini, 429 con `retry-after` en cabecera y en el mensaje, 402/401 como cuota agotada o clave inválida, reintento ante llamadas mal formadas y la cadena de proveedores (paso al siguiente, pausas por proveedor y modo demo al final).
 - **Protección:** anti-flood, cupos por IP con reloj simulado (memoria y Redis), presupuesto de tokens, *cooldown* y paso al modo demo de punta a punta.
 - **RAG:** chunking, ingesta incremental, búsqueda híbrida, degradación a BM25, cliente de Voyage y, en la CI, el almacén pgvector contra un PostgreSQL real.
 - **Sesiones:** dos réplicas comparten la conversación a través de Redis.
@@ -307,7 +319,7 @@ Ningún test llama a un modelo real: se usan proveedores falsos con turnos prede
 backend/
   app/agent/loop.py        Loop agéntico (generador de eventos) y guardado del viaje por el servidor
   app/agent/tools.py       Herramientas + esquemas Pydantic + vista compacta para el modelo
-  app/agent/providers.py   Interfaz de modelo + Claude + APIs compatibles con OpenAI (Gemini, Groq)
+  app/agent/providers.py   Interfaz de modelo + Claude + APIs compatibles con OpenAI (Gemini, Groq, Hugging Face...)
   app/agent/guard.py       Modelo real con presupuesto, reintentos y paso automático al modo demo
   app/agent/demo.py        Proveedor demo sin API key
   app/limits.py            Anti-flood, cupo por IP y presupuesto diario de tokens
@@ -332,13 +344,14 @@ frontend/
 | 1.1 | RAG híbrido sobre guías de viaje (BM25 + embeddings, pgvector) con citas de fuentes y evals de recuperación en la CI |
 | 1.2 | IA real gratis con Groq, protección frente a abusos (anti-flood, cupos por IP, presupuesto diario) y paso automático al modo demo |
 | 1.3 | Gemini como proveedor gratuito, resultados compactos para el modelo (menos tokens por consulta), guardado del viaje garantizado por el servidor y guardarraíl de alcance |
+| 1.4 | Cadena de proveedores gratuitos (Gemini → Groq → Hugging Face u otro compatible con OpenAI) con pausa por proveedor: al agotarse uno, sigue el siguiente antes de pasar al modo demo |
 
 ## Limitaciones conocidas
 
 - **Los viajes guardados son compartidos:** cualquier visitante ve los viajes de los demás y puede borrarlos, porque la API no distingue usuarios. No contienen datos personales, pero es lo primero de los próximos pasos.
 - **El guardarraíl de alcance está en el prompt:** reduce mucho las respuestas fuera de tema, pero ningún prompt es infalible con un usuario insistente.
 - **Persistencia en la demo pública:** en el plan gratuito de Render la base de datos SQLite se pierde con cada despliegue o reinicio.
-- **Cuotas gratuitas:** con mucho tráfico, la IA real se agota antes y la app pasa al modo demo (por diseño, sin errores ni costes).
+- **Cuotas gratuitas:** con mucho tráfico, la cadena de proveedores se agota antes y la app pasa al modo demo (por diseño, sin errores ni costes). Cada proveedor responde con un estilo algo distinto, así que la calidad puede variar al pasar de uno a otro.
 - **Datos de ejemplo:** el clima, los costes y las actividades de los destinos son aproximados y sirven para la demostración.
 
 ## Créditos
