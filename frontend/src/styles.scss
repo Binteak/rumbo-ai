@@ -8,20 +8,33 @@
  */
 
 :root {
-  --bg: #070b16;
-  --panel: rgba(17, 24, 43, 0.72);
-  --panel-solid: #111a2e;
-  --line: rgba(148, 163, 184, 0.14);
-  --line-strong: rgba(148, 163, 184, 0.26);
-  --text: #e6ebf5;
-  --muted: #8b97ad;
-  --teal: #2dd4bf;
-  --violet: #8b5cf6;
-  --coral: #fb7185;
-  --amber: #fbbf24;
-  --ok: #34d399;
-  --err: #f87171;
-  --grad: linear-gradient(120deg, var(--teal), var(--violet) 55%, var(--coral));
+  /* Paleta "marino + ámbar": base clara, marino para el texto, dorado y naranja para los acentos y un azul suave. */
+  --bg: #f6f4ef;
+  --panel: rgba(255, 255, 255, 0.94);
+  --panel-solid: #ffffff;
+  --sand: #f5ede0;
+  --ink-rgb: 20, 41, 74;
+  --line: rgba(var(--ink-rgb), 0.11);
+  --line-strong: rgba(var(--ink-rgb), 0.2);
+  --text: #14294a;
+  --text-soft: #33445e;
+  --muted: #5f6b7d;
+  --gold: #d9930d;
+  --gold-rgb: 217, 147, 13;
+  --gold-ink: #9a6205;
+  --orange: #ec7c30;
+  --orange-rgb: 236, 124, 48;
+  --orange-ink: #c4621c;
+  --blue: #2d5c94;
+  --blue-rgb: 45, 92, 148;
+  --amber: #b7790a;
+  --amber-rgb: 217, 147, 13;
+  --ok: #3f74b5;
+  --ok-rgb: 63, 116, 181;
+  --err: #d14b3c;
+  --err-rgb: 209, 75, 60;
+  --grad: linear-gradient(120deg, #f2b84b, var(--orange));
+  --shadow: 0 1px 2px rgba(var(--ink-rgb), 0.05), 0 8px 24px rgba(var(--ink-rgb), 0.05);
   --radius: 18px;
   /* Alto de la cabecera fija: las páginas a pantalla completa lo descuentan. */
   --topbar-h: 65px;
@@ -49,16 +62,16 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-corner { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.22);
+  background: rgba(var(--ink-rgb), 0.18);
   border: 2px solid transparent; border-radius: 99px; background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, var(--teal), var(--violet)); border: 2px solid transparent; background-clip: padding-box;
+  background: linear-gradient(180deg, #f2b84b, var(--orange)); border: 2px solid transparent; background-clip: padding-box;
 }
-::-webkit-scrollbar-thumb:active { background: var(--violet); background-clip: padding-box; }
+::-webkit-scrollbar-thumb:active { background: var(--orange); background-clip: padding-box; }
 /* Firefox no admite ::-webkit-scrollbar: usa las propiedades estándar. */
 @supports not selector(::-webkit-scrollbar) {
-  * { scrollbar-width: thin; scrollbar-color: rgba(148, 163, 184, 0.28) transparent; }
+  * { scrollbar-width: thin; scrollbar-color: rgba(var(--ink-rgb), 0.25) transparent; }
 }
 
 button { font: inherit; color: inherit; cursor: pointer; }
@@ -81,7 +94,7 @@ p { margin: 0; }
 
 /* Panel lateral (chat y traza) */
 .panel {
-  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
   backdrop-filter: blur(16px); display: flex; flex-direction: column; min-height: 0;
 }
 .panel-head {
@@ -90,7 +103,7 @@ p { margin: 0; }
 }
 .ghost {
   background: transparent; border: 1px solid var(--line-strong); border-radius: 10px; padding: 6px 12px; font-size: 12.5px;
-  &:hover:not(:disabled) { border-color: var(--teal); }
+  &:hover:not(:disabled) { border-color: var(--gold); }
 }
 
 /* Página de contenido (lista y detalle de viajes) */
