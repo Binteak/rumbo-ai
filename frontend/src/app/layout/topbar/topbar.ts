@@ -2,6 +2,7 @@ import { DecimalPipe, PercentPipe } from '@angular/common';
 import { Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { SystemStatusStore } from '../../core/status/application/system-status.store';
+import { LogoMark } from '../../core/ui/logo-mark/logo-mark';
 import { DEMO_PROVIDER } from '../../core/status/domain/system-status';
 import { ChatStore } from '../../features/planner/application/chat.store';
 import { providerLabel } from './provider-label';
@@ -9,7 +10,7 @@ import { providerLabel } from './provider-label';
 /** Cabecera fija: marca, navegación, cifras globales, selector de modo y aviso sobre el servicio. */
 @Component({
   selector: 'app-topbar',
-  imports: [DecimalPipe, PercentPipe, RouterLink, RouterLinkActive],
+  imports: [DecimalPipe, PercentPipe, RouterLink, RouterLinkActive, LogoMark],
   templateUrl: './topbar.html',
   styleUrl: './topbar.scss',
   host: {

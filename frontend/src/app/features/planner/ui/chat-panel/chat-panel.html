@@ -24,14 +24,20 @@
         <p class="chat-notice">{{ m.text }}</p>
       } @else {
         <div class="msg" [class.user]="m.role === 'user'">
-          <span class="avatar">{{ m.role === 'user' ? 'Tú' : 'R' }}</span>
+          <span class="avatar">
+            @if (m.role === 'user') {
+              Tú
+            } @else {
+              <app-logo-mark />
+            }
+          </span>
           <p>{{ textOf(m) }}</p>
         </div>
       }
     }
     @if (running()) {
       <div class="msg">
-        <span class="avatar">R</span>
+        <span class="avatar"><app-logo-mark /></span>
         <p class="typing"><i></i><i></i><i></i></p>
       </div>
     }

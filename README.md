@@ -361,7 +361,7 @@ Las páginas son contenedores que conectan los stores con componentes presentaci
 | 1.2 | IA real gratis con Groq, protección frente a abusos (anti-flood, cupos por IP, presupuesto diario) y paso automático al modo demo |
 | 1.3 | Gemini como proveedor gratuito, resultados compactos para el modelo (menos tokens por consulta), guardado del viaje garantizado por el servidor y guardarraíl de alcance |
 | 1.4 | Cadena de proveedores gratuitos (Gemini → Groq → Hugging Face u otro compatible con OpenAI) con pausa por proveedor: al agotarse uno, sigue el siguiente antes de pasar al modo demo |
-| 1.5 | Nueva identidad visual de app de viajes: tema claro marino + ámbar con acentos naranja y un azul suave, colores centralizados en variables CSS y cabecera del viaje con una ilustración minimalista de cada ciudad (escritorio y móvil) |
+| 1.5 | Nueva identidad visual de app de viajes: tema claro marino + ámbar con acentos naranja y un azul suave, colores centralizados en variables CSS, cabecera del viaje con una ilustración minimalista de cada ciudad (escritorio y móvil) y logo de catalejo |
 
 ## Limitaciones conocidas
 

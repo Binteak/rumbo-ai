@@ -11,12 +11,13 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { LogoMark } from '../../../../core/ui/logo-mark/logo-mark';
 import { ChatMessage } from '../../domain/run';
 
 /** Panel de conversación. Presentacional: recibe los mensajes y avisa de lo que hace el usuario. */
 @Component({
   selector: 'app-chat-panel',
-  imports: [FormsModule],
+  imports: [FormsModule, LogoMark],
   templateUrl: './chat-panel.html',
   styleUrl: './chat-panel.scss',
 })
