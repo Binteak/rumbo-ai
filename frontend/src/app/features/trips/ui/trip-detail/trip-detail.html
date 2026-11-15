@@ -1,9 +1,11 @@
 @let t = trip();
 <section class="trip">
-  <header class="hero" [style.--h1]="hue()[0]" [style.--h2]="hue()[1]">
-    <div class="hero-glow"></div>
+  <header class="hero" [class.has-art]="art()">
+    @if (art(); as art) {
+      <div class="hero-art" aria-hidden="true" [style.background-image]="art"></div>
+    }
     <span class="flag">{{ t.flag }}</span>
-    <div>
+    <div class="hero-copy">
       <p class="eyebrow">Viaje guardado · #{{ t.id }}</p>
       <h1>{{ t.title }}</h1>
       <p class="summary">{{ t.summary }}</p>

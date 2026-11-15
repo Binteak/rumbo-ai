@@ -62,9 +62,17 @@ describe('TripDetail', () => {
     expect(prices).toEqual(['Gratis', '25 €']);
   });
 
-  it('usa una paleta por defecto para un destino sin colores propios', async () => {
+  it('pone de fondo la ilustración de la ciudad del viaje', async () => {
+    await render(aTrip({ destinationId: 'kioto' }));
+
+    expect(el.querySelector('.hero')?.classList).toContain('has-art');
+    expect(el.querySelector<HTMLElement>('.hero-art')?.style.backgroundImage).toContain('cities/kioto.svg');
+  });
+
+  it('deja la cabecera lisa si el destino no tiene ilustración', async () => {
     await render(aTrip({ destinationId: 'atlantida' }));
 
-    expect(el.querySelector<HTMLElement>('.hero')?.style.getPropertyValue('--h1')).toBe('#2dd4bf');
+    expect(el.querySelector('.hero')?.classList).not.toContain('has-art');
+    expect(el.querySelector('.hero-art')).toBeNull();
   });
 });

@@ -17,20 +17,19 @@ const MONTHS = [
   'diciembre',
 ];
 
-/** Paleta por destino para el fondo de la cabecera. */
-const HUES: Record<string, [string, string]> = {
-  lisboa: ['#f59e0b', '#ef4444'],
-  kioto: ['#f472b6', '#7c3aed'],
-  reikiavik: ['#22d3ee', '#4f46e5'],
-  cdmx: ['#fb7185', '#f59e0b'],
-  marrakech: ['#f97316', '#be123c'],
-  copenhague: ['#38bdf8', '#0f766e'],
-  seul: ['#a78bfa', '#ec4899'],
-  buenosaires: ['#60a5fa', '#f472b6'],
-  ciudaddelcabo: ['#34d399', '#0ea5e9'],
-  nuevayork: ['#facc15', '#6366f1'],
-};
-const DEFAULT_HUE: [string, string] = ['#2dd4bf', '#8b5cf6'];
+/** Destinos con ilustración propia para la cabecera (`public/cities/<id>.svg`). */
+const CITY_ART = new Set([
+  'lisboa',
+  'kioto',
+  'reikiavik',
+  'cdmx',
+  'marrakech',
+  'copenhague',
+  'seul',
+  'buenosaires',
+  'ciudaddelcabo',
+  'nuevayork',
+]);
 
 const BUDGET_LABELS: Record<string, string> = {
   alojamiento: 'Alojamiento',
@@ -49,7 +48,11 @@ const BUDGET_LABELS: Record<string, string> = {
 export class TripDetail {
   readonly trip = input.required<Trip>();
 
-  protected readonly hue = computed(() => HUES[this.trip().destinationId] ?? DEFAULT_HUE);
+  /** Fondo ilustrado de la cabecera, o `null` si el destino no tiene ilustración. */
+  protected readonly art = computed(() => {
+    const id = this.trip().destinationId;
+    return CITY_ART.has(id) ? `url('cities/${id}.svg')` : null;
+  });
   protected readonly monthName = computed(() => {
     const month = this.trip().month;
     return month ? MONTHS[month - 1] : null;
