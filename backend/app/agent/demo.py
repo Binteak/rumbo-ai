@@ -1,8 +1,9 @@
-"""Proveedor de demostración: simula a Claude sin API key.
+"""Modo demo: simula un modelo de IA sin API key y sin coste.
 
-Interpreta la petición con reglas simples y decide qué herramientas llamar,
-devolviendo la misma estructura que el proveedor real. Las herramientas se
-ejecutan de verdad, así que la demo enseña el loop agéntico completo.
+Interpreta la petición con reglas simples y decide qué herramientas llamar. Al final del
+archivo, `DemoChatModel` lo presenta a LangChain como un modelo de chat más: el agente es el
+mismo en modo real y en modo demo, solo cambia el "cerebro". Las herramientas se ejecutan de
+verdad, así que la demo enseña el agente completo.
 """
 
 from __future__ import annotations
@@ -12,10 +13,35 @@ import re
 import time
 import unicodedata
 from dataclasses import dataclass, field
+from typing import Any
+
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
 
 from ..rag.text import tokenize
-from .providers import Block, ModelTurn
 from .tools import MONTHS, destinations
+
+
+@dataclass
+class Block:
+    type: str  # "text" | "tool_use"
+    text: str = ""
+    id: str = ""
+    name: str = ""
+    input: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ModelTurn:
+    """Lo que decide el demo en cada paso: texto y/o llamadas a herramientas."""
+
+    stop_reason: str  # "tool_use" | "end_turn"
+    blocks: list[Block]
+    history_content: Any
+    input_tokens: int = 0
+    output_tokens: int = 0
+
 
 ALIASES = {
     "lisboa": ["lisboa", "portugal"],
@@ -313,3 +339,53 @@ class DemoProvider:
         # Estimación aproximada (4 caracteres ≈ 1 token) para que la demo muestre métricas.
         turn.input_tokens = len(json.dumps(messages, ensure_ascii=False, default=str)) // 4
         return turn
+
+
+# --- El demo como modelo de LangChain -------------------------------------------------
+
+
+def _to_demo_messages(messages: list[BaseMessage]) -> list[dict]:
+    """Traduce los mensajes de LangChain al formato sencillo que entiende el demo."""
+    out: list[dict] = []
+    for m in messages:
+        if isinstance(m, HumanMessage):
+            out.append({"role": "user", "content": m.text})
+        elif isinstance(m, AIMessage):
+            content: list[dict] = [{"type": "text", "text": m.text}] if m.text else []
+            content += [{"type": "tool_use", "id": c["id"], "name": c["name"], "input": c["args"]} for c in m.tool_calls]
+            out.append({"role": "assistant", "content": content})
+        elif isinstance(m, ToolMessage):
+            result = {"type": "tool_result", "tool_use_id": m.tool_call_id, "content": m.text, "is_error": m.status == "error"}
+            out.append({"role": "user", "content": [result]})
+    return out
+
+
+class DemoChatModel(BaseChatModel):
+    """Modelo de chat "falso" para LangChain: en vez de llamar a una API, decide con reglas."""
+
+    delay_s: float = 0.0
+    engine: Any = None
+
+    def model_post_init(self, __context: Any) -> None:
+        self.engine = DemoProvider(delay_s=self.delay_s)
+
+    @property
+    def _llm_type(self) -> str:
+        return "rumbo-demo"
+
+    def bind_tools(self, tools: Any, **kwargs: Any) -> DemoChatModel:
+        return self  # el demo ya conoce las herramientas de Rumbo
+
+    def _generate(self, messages: list[BaseMessage], stop: Any = None, run_manager: Any = None, **kwargs: Any) -> ChatResult:
+        turn = self.engine.complete("", [], _to_demo_messages(messages))
+        text = "\n".join(b.text for b in turn.blocks if b.type == "text")
+        tool_calls = [
+            {"name": b.name, "args": b.input, "id": b.id, "type": "tool_call"} for b in turn.blocks if b.type == "tool_use"
+        ]
+        usage = {
+            "input_tokens": turn.input_tokens,
+            "output_tokens": turn.output_tokens,
+            "total_tokens": turn.input_tokens + turn.output_tokens,
+        }
+        message = AIMessage(content=text, tool_calls=tool_calls, usage_metadata=usage)
+        return ChatResult(generations=[ChatGeneration(message=message)])

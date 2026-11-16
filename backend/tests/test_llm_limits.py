@@ -1,266 +1,93 @@
 import json
 
 import fakeredis
-import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 import app.main as main
-from app.agent import (
-    Agent,
-    DemoProvider,
-    GuardedProvider,
-    OpenAICompatibleProvider,
-    ProviderUnavailable,
-    RateLimited,
-    RunStats,
-    ToolContext,
-)
-from app.agent.providers import Block, ModelTurn, to_openai_messages, to_openai_tools
-from app.agent.tools import tool_schemas
+from app.agent import Agent, RunStats, ToolContext, build_real_providers
 from app.limits import LimitsConfig, MemoryCounterStore, RedisCounterStore, UsageLimits, client_ip
+from tests.fakes import FakeBudget, HTTPError, ScriptedModel, end_turn, provider
 
-# --- Traducción al formato de OpenAI --------------------------------------------
-
-
-def test_history_is_translated_to_openai_format():
-    history = [
-        {"role": "user", "content": "3 días en Lisboa"},
-        {
-            "role": "assistant",
-            "content": [
-                {"type": "thinking", "thinking": "...", "signature": "x"},
-                {"type": "text", "text": "Calculo el presupuesto."},
-                {"type": "tool_use", "id": "t1", "name": "estimate_budget", "input": {"destination_id": "lisboa", "days": 3}},
-            ],
-        },
-        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": '{"total_eur": 360}'}]},
-    ]
-    out = to_openai_messages("sistema", history)
-    assert out[0] == {"role": "system", "content": "sistema"}
-    assert out[1] == {"role": "user", "content": "3 días en Lisboa"}
-    assert out[2]["content"] == "Calculo el presupuesto."  # el bloque de razonamiento de Claude se omite
-    call = out[2]["tool_calls"][0]
-    assert call["id"] == "t1" and json.loads(call["function"]["arguments"])["days"] == 3
-    assert out[3] == {"role": "tool", "tool_call_id": "t1", "content": '{"total_eur": 360}'}
+QUESTION = "¿Necesito visado para Japón?"
 
 
-def test_tools_are_exposed_as_functions():
-    tools = to_openai_tools(tool_schemas())
-    assert {t["type"] for t in tools} == {"function"}
-    climate = next(t["function"] for t in tools if t["function"]["name"] == "get_climate")
-    assert climate["parameters"]["required"] == ["destination_id", "month"]
+def run(agent, prompt=QUESTION):
+    stats = RunStats()
+    events = list(agent.run([], prompt, ToolContext(save_trip=lambda d: {**d, "id": 1}), stats))
+    return events, stats
 
 
-# --- Proveedor compatible con OpenAI (Groq) --------------------------------------
+def notices(events):
+    return [e["text"] for e in events if e["type"] == "notice"]
 
 
-def completion(content=None, tool_calls=None, finish="stop", prompt=100, completion_tokens=20, cached=0):
-    message = {"role": "assistant", "content": content}
-    if tool_calls:
-        message["tool_calls"] = tool_calls
-    return {
-        "choices": [{"message": message, "finish_reason": finish}],
-        "usage": {
-            "prompt_tokens": prompt,
-            "completion_tokens": completion_tokens,
-            "prompt_tokens_details": {"cached_tokens": cached},
-        },
-    }
+# --- Cadena de modelos (middleware) ------------------------------------------------
 
 
-def tool_call(name, args, cid="call_1"):
-    return {"id": cid, "type": "function", "function": {"name": name, "arguments": json.dumps(args)}}
-
-
-def provider_with(responses, seen=None):
-    queue = list(responses)
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        if seen is not None:
-            seen.append(json.loads(request.content))
-        return queue.pop(0)
-
-    return OpenAICompatibleProvider(
-        "gsk-test", "openai/gpt-oss-120b", transport=httpx.MockTransport(handler), sleep=lambda _s: None
-    )
-
-
-def test_provider_parses_tool_calls_usage_and_sends_low_reasoning():
-    seen = []
-    p = provider_with(
-        [
-            httpx.Response(
-                200,
-                json=completion(
-                    None, [tool_call("get_climate", {"destination_id": "kioto", "month": 4})], "tool_calls", cached=60
-                ),
-            )
-        ],
-        seen,
-    )
-    turn = p.complete("s", tool_schemas(), [{"role": "user", "content": "hola"}])
-    assert turn.stop_reason == "tool_use"
-    assert turn.blocks[0].name == "get_climate" and turn.blocks[0].input == {"destination_id": "kioto", "month": 4}
-    assert (turn.input_tokens, turn.output_tokens, turn.cached_tokens) == (100, 20, 60)
-    assert turn.history_content == [
-        {"type": "tool_use", "id": "call_1", "name": "get_climate", "input": {"destination_id": "kioto", "month": 4}}
-    ]
-    assert seen[0]["reasoning_effort"] == "low" and seen[0]["tools"][0]["type"] == "function"
-
-
-def test_provider_maps_finish_reasons_and_bad_json():
-    p = provider_with(
-        [
-            httpx.Response(200, json=completion("cortado", finish="length")),
-            httpx.Response(
-                200,
-                json=completion(
-                    None, [{"id": "c", "type": "function", "function": {"name": "get_climate", "arguments": "{mal"}}]
-                ),
-            ),
-        ]
-    )
-    assert p.complete("s", [], [{"role": "user", "content": "x"}]).stop_reason == "max_tokens"
-    turn = p.complete("s", [], [{"role": "user", "content": "x"}])
-    assert "_argumentos_no_validos" in turn.blocks[0].input  # Pydantic devolverá el error al modelo
-
-
-def test_provider_raises_rate_limited_with_retry_after():
-    p = provider_with(
-        [
-            httpx.Response(429, headers={"retry-after": "7"}, json={"error": {"message": "rate limit"}}),
-            httpx.Response(429, text="Rate limit reached. Please try again in 6m11.5s."),
-        ]
-    )
-    with pytest.raises(RateLimited) as e:
-        p.complete("s", [], [{"role": "user", "content": "x"}])
-    assert e.value.retry_after == 7
-    with pytest.raises(RateLimited) as e:
-        p.complete("s", [], [{"role": "user", "content": "x"}])
-    assert e.value.retry_after == pytest.approx(371.5)
-
-
-def test_provider_retries_once_on_malformed_tool_call():
-    p = provider_with(
-        [httpx.Response(400, json={"error": {"code": "tool_use_failed"}}), httpx.Response(200, json=completion("ok"))]
-    )
-    assert p.complete("s", [], [{"role": "user", "content": "x"}]).blocks[0].text == "ok"
-
-
-def test_provider_retries_on_503_and_recovers():
-    p = provider_with(
-        [httpx.Response(503, json={"error": {"status": "UNAVAILABLE"}}), httpx.Response(200, json=completion("ok"))]
-    )
-    assert p.complete("s", [], [{"role": "user", "content": "x"}]).blocks[0].text == "ok"
-
-
-def test_provider_does_not_retry_on_read_timeout():
-    calls = []
-
-    def handler(request):
-        calls.append(1)
-        raise httpx.ReadTimeout("timed out", request=request)
-
-    p = OpenAICompatibleProvider("k", "gemini-flash-latest", transport=httpx.MockTransport(handler), sleep=lambda _s: None)
-    with pytest.raises(ProviderUnavailable):
-        p.complete("s", [], [{"role": "user", "content": "x"}])
-    assert len(calls) == 1
-
-
-def test_provider_raises_unavailable_after_repeated_503():
-    p = provider_with([httpx.Response(503, text="The model is overloaded")] * 3)
-    with pytest.raises(ProviderUnavailable) as e:
-        p.complete("s", [], [{"role": "user", "content": "x"}])
-    assert "503" in str(e.value)
-
-
-def test_full_agent_run_with_openai_compatible_provider():
-    seen = []
-    p = provider_with(
-        [
-            httpx.Response(
-                200, json=completion(None, [tool_call("get_climate", {"destination_id": "kioto", "month": 4})], "tool_calls")
-            ),
-            httpx.Response(200, json=completion("En abril hay 15 °C de media.")),
-        ],
-        seen,
-    )
-    history, stats = [], RunStats()
-    events = list(Agent(p).run(history, "¿Qué tiempo hace en Kioto en abril?", ToolContext(), stats))
-    assert stats.status == "completed" and events[-1]["text"] == "En abril hay 15 °C de media."
-    tool_msg = seen[1]["messages"][-1]
-    assert tool_msg["role"] == "tool" and json.loads(tool_msg["content"])["avg_temp_c"] == 15
-    assert len(history) == 4
-
-
-# --- Proveedor protegido -----------------------------------------------------------
-
-
-class FakeBudget:
-    def __init__(self, ok=True, cooling=()):
-        self.ok, self.spent, self.cooldowns, self.paused = ok, 0, [], []
-        self.cooling = set(cooling)
-
-    def can_call(self):
-        return self.ok
-
-    def spend(self, tokens):
-        self.spent += tokens
-
-    def cooldown(self, seconds, provider=None):
-        self.cooldowns.append(seconds)
-        self.paused.append(provider)
-
-    def cooling_down(self, provider=None):
-        return provider in self.cooling
-
-
-class Scripted:
-    model = "fake"
-
-    def __init__(self, items, name="groq"):
-        self.items = list(items)
-        self.name = name
-
-    def complete(self, system, tools, messages):
-        item = self.items.pop(0)
-        if isinstance(item, Exception):
-            raise item
-        return item
-
-
-def turn(text="hola", inp=100, out=10, cached=40):
-    return ModelTurn("end_turn", [Block(type="text", text=text)], [{"type": "text", "text": text}], inp, out, cached)
-
-
-def test_guarded_spends_uncached_tokens():
+def test_chain_spends_uncached_tokens():
     budget = FakeBudget()
-    g = GuardedProvider(Scripted([turn()]), DemoProvider(), budget)
-    assert g.complete("s", [], [{"role": "user", "content": "x"}]).blocks[0].text == "hola"
-    assert budget.spent == 100 - 40 + 10 and g.name == "groq"
+    agent = Agent([provider([end_turn("hola", inp=100, out=10, cached=40)])], budget=budget)
+    events, stats = run(agent, "hola")
+    assert events[-1]["text"] == "hola" and agent.current.name == "groq"
+    assert budget.spent == 100 - 40 + 10 and stats.input_tokens == 100
 
 
-def test_guarded_waits_on_short_rate_limit():
-    slept = []
-    g = GuardedProvider(Scripted([RateLimited(3), turn("tras esperar")]), DemoProvider(), FakeBudget(), sleep=slept.append)
-    assert g.complete("s", [], [{"role": "user", "content": "x"}]).blocks[0].text == "tras esperar"
-    assert slept == [3.5]
-
-
-def test_guarded_falls_back_to_demo_on_long_rate_limit():
+def test_chain_falls_back_to_demo_on_rate_limit():
     budget = FakeBudget()
-    g = GuardedProvider(Scripted([RateLimited(600)]), DemoProvider(), budget)
-    events = list(Agent(g).run([], "¿Necesito visado para Japón?", ToolContext(), stats := RunStats()))
-    assert budget.cooldowns == [600] and g.name == "demo"
-    assert any(e["type"] == "notice" and "modo demo" in e["text"] for e in events)
+    agent = Agent([provider([HTTPError(429, retry_after="600")])], budget=budget)
+    events, stats = run(agent)
+    assert budget.cooldowns == [600] and agent.current.name == "demo"
+    assert notices(events) == ["Groq ha alcanzado su cuota gratuita: continúo con modo demo."]
     assert stats.status == "completed" and "Guía de Kioto" in events[-1]["text"]
 
 
-def test_guarded_uses_demo_when_budget_is_exhausted():
-    g = GuardedProvider(Scripted([]), DemoProvider(), FakeBudget(ok=False))
-    t = g.complete("s", [], [{"role": "user", "content": "3 días en Lisboa"}])
-    assert "presupuesto" in t.notice and g.switched
+def test_chain_falls_back_to_demo_when_provider_unavailable():
+    budget = FakeBudget()
+    agent = Agent([provider([HTTPError(503)])], budget=budget)
+    events, stats = run(agent)
+    assert budget.cooldowns == [30] and agent.current.name == "demo"
+    assert "no está disponible" in notices(events)[0] and stats.status == "completed"
+
+
+def test_chain_uses_demo_when_budget_is_exhausted():
+    agent = Agent([provider([])], budget=FakeBudget(ok=False))
+    events, stats = run(agent, "3 días en Lisboa")
+    assert "presupuesto" in notices(events)[0] and agent.current.name == "demo" and stats.status == "completed"
+
+
+def test_chain_moves_to_next_provider_when_quota_is_exhausted():
+    budget = FakeBudget()
+    gemini = provider([HTTPError(402)], name="gemini")
+    groq = provider([end_turn("respuesta de Groq")], name="groq")
+    agent = Agent([gemini, groq], budget=budget)
+    events, _ = run(agent, "hola")
+    assert events[-1]["text"] == "respuesta de Groq" and agent.current.name == "groq"
+    assert notices(events) == ["Gemini ha alcanzado su cuota gratuita: continúo con Groq."]
+    assert budget.paused == ["gemini"] and budget.cooldowns == [3600]
+
+
+def test_chain_ends_in_demo_when_every_provider_fails():
+    budget = FakeBudget()
+    chain = [
+        provider([HTTPError(429)], name="gemini"),
+        provider([HTTPError(503)], name="groq"),
+        provider([HTTPError(402)], name="deepseek"),
+    ]
+    agent = Agent(chain, budget=budget)
+    events, stats = run(agent)
+    texts = " ".join(notices(events))
+    assert "continúo con Groq" in texts and "continúo con DeepSeek" in texts and texts.endswith("modo demo.")
+    assert budget.paused == ["gemini", "groq", "deepseek"] and agent.current.name == "demo"
+    assert stats.status == "completed"
+
+
+def test_chain_skips_providers_in_cooldown_without_notice():
+    agent = Agent(
+        [provider([], name="gemini"), provider([end_turn("de Groq")], name="groq")], budget=FakeBudget(cooling=("gemini",))
+    )
+    events, _ = run(agent, "hola")
+    assert events[-1]["text"] == "de Groq" and not notices(events)
 
 
 # --- Límites ---------------------------------------------------------------------
@@ -329,19 +156,23 @@ def test_client_ip_uses_last_forwarded_entry():
     assert client_ip({"cf-connecting-ip": "5.5.5.5", "x-forwarded-for": "5.5.5.5, 172.68.1.1"}, "10.0.0.1") == "5.5.5.5"
 
 
+def test_provider_cooldown_is_per_provider(limits):
+    lim, _ = limits
+    lim.cooldown(600, "gemini")
+    assert lim.cooling_down("gemini") and not lim.cooling_down("groq") and not lim.cooling_down()
+    assert lim.can_start_run()  # el resto de la cadena sigue disponible
+
+
 # --- API con modelo real simulado ----------------------------------------------------
 
 
 @pytest.fixture
 def real_ai(monkeypatch):
-    class FakeReal:
-        name, model = "groq", "openai/gpt-oss-120b"
-
-        def complete(self, system, tools, messages):
-            return turn("Respuesta del modelo real", inp=200, out=30, cached=0)
-
+    groq = provider([], name="groq")
+    groq.model = "openai/gpt-oss-120b"
+    groq.llm = ScriptedModel(items=[end_turn("Respuesta del modelo real", inp=200, out=30) for _ in range(10)])
     lim = UsageLimits(MemoryCounterStore(), LimitsConfig(flood_per_minute=5, llm_per_hour=1, llm_per_day=5))
-    monkeypatch.setattr(main, "real_providers", [FakeReal()])
+    monkeypatch.setattr(main, "real_providers", [groq])
     monkeypatch.setattr(main, "limits", lim)
     return lim
 
@@ -355,7 +186,7 @@ def test_ip_over_quota_gets_demo_mode_with_notice(real_ai):
         first = sse(client.post("/api/chat", json={"message": "hola"}).text)
         assert first[0]["mode"] == "groq" and first[-2]["text"] == "Respuesta del modelo real"
         assert real_ai.tokens_remaining() == real_ai.config.daily_token_budget - 230
-        second = sse(client.post("/api/chat", json={"message": "¿Necesito visado para Japón?"}).text)
+        second = sse(client.post("/api/chat", json={"message": QUESTION}).text)
         assert second[0]["mode"] == "demo"
         assert second[1]["type"] == "notice" and "1 por hora" in second[1]["text"]
         usage = client.get("/api/usage").json()
@@ -383,27 +214,41 @@ def test_usage_in_demo_mode():
         assert client.get("/api/usage").json() == {"mode": "demo", "model": "rumbo-demo", "real_ai": False}
 
 
-# --- Gemini --------------------------------------------------------------------------
+def test_api_skips_provider_in_cooldown(monkeypatch):
+    gemini = provider([end_turn("Respuesta de gemini")], name="gemini")
+    groq = provider([end_turn("Respuesta de groq")], name="groq")
+    lim = UsageLimits(MemoryCounterStore(), LimitsConfig())
+    lim.cooldown(3600, "gemini")
+    monkeypatch.setattr(main, "real_providers", [gemini, groq])
+    monkeypatch.setattr(main, "limits", lim)
+    with TestClient(main.app) as client:
+        usage = client.get("/api/usage").json()
+        assert usage["mode"] == "groq" and usage["chain"] == ["gemini", "groq"] and usage["real_ai"] is True
+        events = sse(client.post("/api/chat", json={"message": "hola"}).text)
+        assert events[0]["mode"] == "groq" and events[-2]["text"] == "Respuesta de groq"
+        lim.cooldown(3600, "groq")
+        events = sse(client.post("/api/chat", json={"message": "hola"}).text)
+        assert events[0]["mode"] == "demo" and "agotado su cuota" in events[1]["text"]
 
 
-def test_gemini_thought_signatures_are_kept_and_sent_back():
-    seen = []
-    signature = {"google": {"thought_signature": "firma-123"}}
-    call = {**tool_call("get_climate", {"destination_id": "kioto", "month": 4}), "extra_content": signature}
-    p = provider_with(
-        [httpx.Response(200, json=completion(None, [call], "tool_calls")), httpx.Response(200, json=completion("15 °C"))], seen
+# --- Configuración -----------------------------------------------------------------
+
+
+def test_providers_are_langchain_chat_models():
+    from app.config import Settings
+
+    s = Settings(
+        _env_file=None,
+        agent_mode="auto",
+        anthropic_api_key="a",
+        gemini_api_key="g",
+        groq_api_key="q",
+        extra_llm_api_key="hf",
     )
-    p.model = "gemini-flash-latest"
-    events = list(Agent(p).run([], "clima en Kioto en abril", ToolContext(), RunStats()))
-    assert events[-1]["text"] == "15 °C"
-    sent_call = next(m for m in seen[1]["messages"] if m.get("tool_calls"))["tool_calls"][0]
-    assert sent_call["extra_content"] == signature and seen[0]["reasoning_effort"] == "low"
-
-
-def test_missing_tool_call_id_gets_generated():
-    call = {"type": "function", "function": {"name": "get_climate", "arguments": "{}"}}
-    turn = OpenAICompatibleProvider._parse(completion(None, [call], "tool_calls"))
-    assert turn.blocks[0].id.startswith("call_") and turn.history_content[0]["id"] == turn.blocks[0].id
+    providers = build_real_providers(s)
+    assert [p.name for p in providers] == ["claude", "gemini", "groq", "deepseek"]
+    assert [type(p.llm).__name__ for p in providers] == ["ChatAnthropic", "ChatGoogleGenerativeAI", "ChatOpenAI", "ChatOpenAI"]
+    assert providers[3].label == "DeepSeek" and providers[3].model == "deepseek/deepseek-v4-flash:free"
 
 
 def test_gemini_key_selects_gemini():
@@ -418,130 +263,6 @@ def test_gemini_key_selects_gemini():
     assert Settings(_env_file=None, gemini_api_key="g", agent_mode="demo", anthropic_api_key=None).llm_provider == "demo"
 
 
-def test_model_receives_compact_tool_results():
-    seen = []
-    p = provider_with(
-        [
-            httpx.Response(
-                200, json=completion(None, [tool_call("build_itinerary", {"destination_id": "kioto", "days": 3})], "tool_calls")
-            ),
-            httpx.Response(200, json=completion("Listo.")),
-        ],
-        seen,
-    )
-    events = list(Agent(p).run([], "3 días en Kioto", ToolContext(), RunStats()))
-    sent = json.loads(seen[1]["messages"][-1]["content"])
-    assert set(sent) == {"destination", "days"} and isinstance(sent["days"][0]["plan"][0], str)
-    full = next(e for e in events if e["type"] == "tool_result")["output"]
-    assert "activities" in full["days"][0]  # la interfaz sigue recibiendo el detalle completo
-
-
-def test_guarded_falls_back_to_demo_when_provider_unavailable():
-    budget = FakeBudget()
-    g = GuardedProvider(Scripted([ProviderUnavailable("HTTP 503")]), DemoProvider(), budget)
-    events = list(Agent(g).run([], "¿Necesito visado para Japón?", ToolContext(), stats := RunStats()))
-    assert budget.cooldowns == [30] and g.name == "demo"
-    assert any(e["type"] == "notice" and "no está disponible" in e["text"] for e in events)
-    assert stats.status == "completed"
-
-
-# --- Cadena de proveedores (Gemini → Groq → extra → demo) ----------------------------
-
-
-def test_chain_moves_to_next_provider_when_quota_is_exhausted():
-    budget = FakeBudget()
-    gemini = Scripted([RateLimited(3600)], name="gemini")
-    groq = Scripted([turn("respuesta de Groq")], name="groq")
-    g = GuardedProvider([gemini, groq], DemoProvider(), budget)
-    t = g.complete("s", [], [{"role": "user", "content": "x"}])
-    assert t.blocks[0].text == "respuesta de Groq" and g.name == "groq" and not g.switched
-    assert t.notice == "Gemini ha alcanzado su cuota gratuita: continúo con Groq."
-    assert budget.paused == ["gemini"] and budget.cooldowns == [3600]
-    # El siguiente paso del mismo turno sigue con Groq, sin volver a probar Gemini.
-    groq.items.append(turn("otra"))
-    assert g.complete("s", [], [{"role": "user", "content": "x"}]).notice is None
-
-
-def test_chain_ends_in_demo_when_every_provider_fails():
-    budget = FakeBudget()
-    chain = [
-        Scripted([RateLimited(600)], name="gemini"),
-        Scripted([ProviderUnavailable("HTTP 503")], name="groq"),
-        Scripted([RateLimited(3600)], name="huggingface"),
-    ]
-    g = GuardedProvider(chain, DemoProvider(), budget)
-    events = list(Agent(g).run([], "¿Necesito visado para Japón?", ToolContext(), stats := RunStats()))
-    notice = next(e["text"] for e in events if e["type"] == "notice")
-    assert "continúo con Groq" in notice and "continúo con Hugging Face" in notice and notice.endswith("modo demo.")
-    assert budget.paused == ["gemini", "groq", "huggingface"] and g.name == "demo"
-    assert stats.status == "completed"
-
-
-def test_chain_skips_providers_in_cooldown_without_notice():
-    g = GuardedProvider(
-        [Scripted([], name="gemini"), Scripted([turn("de Groq")], name="groq")], DemoProvider(), FakeBudget(cooling={"gemini"})
-    )
-    t = g.complete("s", [], [{"role": "user", "content": "x"}])
-    assert t.blocks[0].text == "de Groq" and t.notice is None
-
-
-def test_provider_cooldown_is_per_provider(limits):
-    lim, _ = limits
-    lim.cooldown(600, "gemini")
-    assert lim.cooling_down("gemini") and not lim.cooling_down("groq") and not lim.cooling_down()
-    assert lim.can_start_run()  # el resto de la cadena sigue disponible
-
-
-def test_api_skips_provider_in_cooldown(monkeypatch):
-    class Fake:
-        model = "fake"
-
-        def __init__(self, name):
-            self.name = name
-
-        def complete(self, system, tools, messages):
-            return turn(f"Respuesta de {self.name}", cached=0)
-
-    lim = UsageLimits(MemoryCounterStore(), LimitsConfig())
-    lim.cooldown(3600, "gemini")
-    monkeypatch.setattr(main, "real_providers", [Fake("gemini"), Fake("groq")])
-    monkeypatch.setattr(main, "limits", lim)
-    with TestClient(main.app) as client:
-        usage = client.get("/api/usage").json()
-        assert usage["mode"] == "groq" and usage["chain"] == ["gemini", "groq"] and usage["real_ai"] is True
-        events = sse(client.post("/api/chat", json={"message": "hola"}).text)
-        assert events[0]["mode"] == "groq" and events[-2]["text"] == "Respuesta de groq"
-        lim.cooldown(3600, "groq")
-        events = sse(client.post("/api/chat", json={"message": "hola"}).text)
-        assert events[0]["mode"] == "demo" and "agotado su cuota" in events[1]["text"]
-
-
-def test_provider_maps_402_and_401_to_chain_errors():
-    p = provider_with([httpx.Response(402, json={"error": "credits exhausted"}), httpx.Response(401, text="bad key")])
-    with pytest.raises(RateLimited) as e:
-        p.complete("s", [], [{"role": "user", "content": "x"}])
-    assert e.value.retry_after == 3600
-    with pytest.raises(ProviderUnavailable):
-        p.complete("s", [], [{"role": "user", "content": "x"}])
-
-
-def test_thought_signatures_are_only_sent_to_gemini():
-    signature = {"google": {"thought_signature": "firma-123"}}
-    history = [
-        {"role": "user", "content": "clima"},
-        {
-            "role": "assistant",
-            "content": [{"type": "tool_use", "id": "c1", "name": "get_climate", "input": {}, "extra_content": signature}],
-        },
-        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "c1", "content": "15 °C"}]},
-    ]
-    seen = []
-    p = provider_with([httpx.Response(200, json=completion("ok"))], seen)  # modelo de Groq
-    p.complete("s", [], history)
-    sent = next(m for m in seen[0]["messages"] if m.get("tool_calls"))["tool_calls"][0]
-    assert "extra_content" not in sent
-
-
 def test_settings_build_the_chain_in_priority_order():
     from app.config import Settings
 
@@ -552,5 +273,5 @@ def test_settings_build_the_chain_in_priority_order():
     only_extra = Settings(
         _env_file=None, agent_mode="auto", anthropic_api_key=None, gemini_api_key=None, groq_api_key=None, extra_llm_api_key="hf"
     )
-    assert only_extra.llm_chain == ["extra"] and only_extra.extra_llm_base_url == "https://router.huggingface.co/v1"
+    assert only_extra.llm_chain == ["extra"] and only_extra.extra_llm_base_url == "https://openrouter.ai/api/v1"
     assert Settings(_env_file=None, agent_mode="demo", gemini_api_key="g", anthropic_api_key=None).llm_chain == []

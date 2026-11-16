@@ -1,11 +1,11 @@
 import pytest
 
-from app.agent.tools import ToolContext, ToolError, execute_tool, tool_schemas
+from app.agent.tools import ToolContext, ToolError, as_langchain_tools, execute_tool
 
 
-def test_schemas_are_generated_from_pydantic():
-    names = {s["name"] for s in tool_schemas()}
-    assert names == {
+def test_tools_are_exposed_to_langchain_with_pydantic_schemas():
+    tools = {t.name: t for t in as_langchain_tools(ToolContext())}
+    assert set(tools) == {
         "search_destinations",
         "get_climate",
         "estimate_budget",
@@ -13,8 +13,7 @@ def test_schemas_are_generated_from_pydantic():
         "search_travel_guides",
         "save_trip",
     }
-    climate = next(s for s in tool_schemas() if s["name"] == "get_climate")
-    assert climate["input_schema"]["required"] == ["destination_id", "month"]
+    assert tools["get_climate"].tool_call_schema.model_json_schema()["required"] == ["destination_id", "month"]
 
 
 def test_search_ranks_by_interests_and_respects_budget():

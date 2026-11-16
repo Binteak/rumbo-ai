@@ -1,6 +1,6 @@
 """Embedders: convierten texto en vectores.
 
-Igual que el agente habla con un `ModelProvider`, el RAG habla con un `Embedder`:
+Igual que el agente puede usar cualquier modelo de chat, el RAG habla con un `Embedder`:
 
 - `VoyageEmbedder`: embeddings semánticos multilingües de Voyage AI (el proveedor
   que recomienda Anthropic, ya que Claude no genera embeddings). Se usa en
