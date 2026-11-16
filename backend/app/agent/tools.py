@@ -2,7 +2,9 @@
 
 Cada herramienta se define una sola vez con un modelo Pydantic: de él sale el
 esquema JSON que ve el modelo y la validación de los argumentos que llegan.
-Si la validación falla, el error vuelve al modelo como `is_error` y él se corrige.
+Si la validación falla, el error vuelve al modelo y él se corrige.
+
+Al final del archivo, `as_langchain_tools` las convierte en herramientas de LangChain.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
+from langchain_core.tools import StructuredTool, ToolException
 from pydantic import BaseModel, Field, ValidationError
 
 DATA_FILE = Path(__file__).resolve().parent.parent / "data" / "destinations.json"
@@ -338,11 +341,6 @@ class Tool:
     handler: Callable[..., dict]
     needs_context: bool = False
 
-    def schema(self) -> dict:
-        schema = self.args_model.model_json_schema()
-        schema.pop("title", None)
-        return {"name": self.name, "description": self.description, "input_schema": schema}
-
 
 TOOLS: dict[str, Tool] = {
     t.name: t
@@ -404,10 +402,6 @@ def model_view(name: str, output: dict) -> dict:
     return output
 
 
-def tool_schemas() -> list[dict]:
-    return [t.schema() for t in TOOLS.values()]
-
-
 def execute_tool(name: str, raw_args: dict[str, Any], ctx: ToolContext | None = None) -> dict:
     tool = TOOLS.get(name)
     if tool is None:
@@ -421,3 +415,32 @@ def execute_tool(name: str, raw_args: dict[str, Any], ctx: ToolContext | None = 
     if ctx is not None:
         ctx.calls.append((name, args.model_dump()))
     return output
+
+
+# --- Conexión con LangChain -----------------------------------------------------------
+
+
+def as_langchain_tools(ctx: ToolContext) -> list[StructuredTool]:
+    """Las herramientas de Rumbo como herramientas de LangChain, ligadas al contexto de este turno."""
+    return [_to_langchain(tool, ctx) for tool in TOOLS.values()]
+
+
+def _to_langchain(tool: Tool, ctx: ToolContext) -> StructuredTool:
+    def run(**args: Any) -> tuple[str, dict]:
+        try:
+            output = execute_tool(tool.name, args, ctx)
+        except ToolError as e:
+            raise ToolException(str(e)) from None
+        except Exception as e:  # noqa: BLE001 - cualquier fallo se le reporta al modelo
+            raise ToolException(f"Error inesperado: {type(e).__name__}: {e}") from None
+        # (contenido, artefacto): el modelo lee un resumen; la interfaz recibe el resultado completo.
+        return json.dumps(model_view(tool.name, output), ensure_ascii=False), output
+
+    return StructuredTool.from_function(
+        func=run,
+        name=tool.name,
+        description=tool.description,
+        args_schema=tool.args_model,
+        response_format="content_and_artifact",
+        handle_tool_error=True,  # un ToolException vuelve al modelo como mensaje de error
+    )

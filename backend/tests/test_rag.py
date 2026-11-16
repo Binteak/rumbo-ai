@@ -6,7 +6,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.agent import Agent, RunStats, ToolContext
-from app.agent.demo import DemoProvider
 from app.agent.tools import ToolError, destinations, execute_tool
 from app.main import app
 from app.rag import get_rag
@@ -145,14 +144,14 @@ def test_tool_rejects_unknown_destination():
 
 
 def test_demo_answers_practical_questions_with_rag_only():
-    events = list(Agent(DemoProvider()).run([], "¿Es seguro Marrakech de noche?", ToolContext(), RunStats()))
+    events = list(Agent([]).run([], "¿Es seguro Marrakech de noche?", ToolContext(), RunStats()))
     assert [e["name"] for e in events if e["type"] == "tool_call"] == ["search_travel_guides"]
     assert "Fuente: Guía de Marrakech · Seguridad" in events[-1]["text"]
 
 
 def test_demo_uses_conversation_context_for_follow_up_questions():
     saved = []
-    agent, history = Agent(DemoProvider()), []
+    agent, history = Agent([]), []
     ctx = ToolContext(save_trip=lambda d: saved.append(d) or {**d, "id": 1})
     list(agent.run(history, "3 días en Lisboa en mayo", ctx, RunStats()))
     events = list(agent.run(history, "¿y cómo me muevo por allí?", ctx, RunStats()))
@@ -172,7 +171,7 @@ def test_demo_does_not_loop_when_the_guides_fail(monkeypatch):
     broken = dataclasses.replace(tools.TOOLS["search_travel_guides"], handler=boom)
     monkeypatch.setitem(tools.TOOLS, "search_travel_guides", broken)
     stats = RunStats()
-    events = list(Agent(DemoProvider()).run([], "¿Necesito visado para Japón?", ToolContext(), stats))
+    events = list(Agent([]).run([], "¿Necesito visado para Japón?", ToolContext(), stats))
     assert stats.status == "completed" and stats.tool_calls == 1 and stats.tool_errors == 1
     assert "no he podido consultar" in events[-1]["text"]
 

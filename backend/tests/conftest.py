@@ -4,6 +4,8 @@ import os
 os.environ["DATABASE_URL"] = "sqlite:///./test_rumbo.db"
 os.environ["AGENT_MODE"] = "demo"
 os.environ["DEMO_DELAY_MS"] = "0"
+# Los tests no envían trazas a LangSmith aunque el .env local las tenga activadas.
+os.environ["LANGSMITH_TRACING"] = "false"
 
 import pytest  # noqa: E402
 

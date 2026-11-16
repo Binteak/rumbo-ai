@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Carga el .env también en las variables de entorno: LangChain lee de ahí LANGSMITH_TRACING,
+# LANGSMITH_API_KEY y LANGSMITH_PROJECT para enviar las trazas del agente a LangSmith.
+load_dotenv()
 
 
 class Settings(BaseSettings):
@@ -12,28 +17,26 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str | None = None
     agent_model: str = "claude-sonnet-5-5"
-    agent_effort: str = "medium"
     agent_max_iterations: int = 12
     # "auto": cadena con los proveedores que tengan clave, en este orden:
-    #   Claude (ANTHROPIC_API_KEY) → Gemini (GEMINI_API_KEY) → Groq (GROQ_API_KEY) → extra (EXTRA_LLM_API_KEY).
+    #   Claude (ANTHROPIC_API_KEY) → Gemini (GEMINI_API_KEY) → Groq (GROQ_API_KEY) → DeepSeek (EXTRA_LLM_API_KEY).
     # Si uno agota su cuota o no responde, el turno sigue con el siguiente; al final de la cadena, el modo demo.
     # "demo" fuerza el modo demo.
     agent_mode: str = "auto"
     demo_delay_ms: int = 700
 
-    # Modelos gratuitos con APIs compatibles con OpenAI (sin tarjeta): Gemini (Google AI Studio) y Groq.
+    # Modelos gratuitos (sin tarjeta): Gemini (Google AI Studio) y Groq (API compatible con OpenAI).
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-flash-latest"
-    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
     groq_api_key: str | None = None
     groq_model: str = "openai/gpt-oss-120b"
     groq_base_url: str = "https://api.groq.com/openai/v1"
-    # Proveedor extra: cualquier API compatible con OpenAI (Hugging Face, OpenRouter, DeepSeek...).
-    # Por defecto, el router de Hugging Face; para otro, cambia la URL, el modelo y el nombre.
+    # Tercer modelo: cualquier API compatible con OpenAI. Por defecto, DeepSeek gratis a través de
+    # OpenRouter (la API directa de DeepSeek es de prepago). Para otro, cambia la URL, el modelo y el nombre.
     extra_llm_api_key: str | None = None
-    extra_llm_name: str = "huggingface"
-    extra_llm_model: str = "openai/gpt-oss-120b"
-    extra_llm_base_url: str = "https://router.huggingface.co/v1"
+    extra_llm_name: str = "deepseek"
+    extra_llm_model: str = "deepseek/deepseek-v4-flash:free"
+    extra_llm_base_url: str = "https://openrouter.ai/api/v1"
     llm_max_output_tokens: int = 2048
 
     # Protección y presupuesto (ver app/limits.py). El presupuesto diario por defecto deja margen

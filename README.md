@@ -1,8 +1,8 @@
 # Rumbo · Agente de viajes con IA
 
-Agente de IA que **planifica viajes completos** (destino, clima, presupuesto e itinerario) y **resuelve dudas prácticas** (visados, transporte, propinas, seguridad...) con RAG sobre guías propias, citando la fuente. Está construido con un **loop agéntico escrito a mano**, sin frameworks, y funciona con Claude o con una cadena de modelos gratuitos (Gemini → Groq → Hugging Face u otro compatible con OpenAI) y, si todos agotan su cuota, en modo demo sin coste. La interfaz muestra en directo cómo razona el agente: cada herramienta que decide usar, sus argumentos, el resultado y cuánto tarda.
+Agente de IA que **planifica viajes completos** (destino, clima, presupuesto e itinerario) y **resuelve dudas prácticas** (visados, transporte, propinas, seguridad...) con RAG sobre guías propias, citando la fuente. Está construido con **LangChain** (`create_agent` + middleware), con trazas en **LangSmith**, y funciona con Claude o con una cadena de modelos gratuitos (Gemini → Groq → DeepSeek) y, si todos agotan su cuota, en modo demo sin coste. La interfaz muestra en directo cómo razona el agente: cada herramienta que decide usar, sus argumentos, el resultado y cuánto tarda.
 
-**Angular 22 · TypeScript · Python · FastAPI · Claude, Gemini, Groq y Hugging Face (tool calling) · RAG (BM25 + embeddings, pgvector) · PostgreSQL · Redis · Server-Sent Events · Docker · Kubernetes · GitHub Actions**
+**Angular 22 · TypeScript · Python · FastAPI · LangChain · Claude, Gemini, Groq y DeepSeek (tool calling) · RAG (BM25 + embeddings, pgvector) · PostgreSQL · Redis · Server-Sent Events · Docker · Kubernetes · GitHub Actions**
 
 ![Rumbo](docs/screenshot.png)
 
@@ -21,7 +21,7 @@ Agente de IA que **planifica viajes completos** (destino, clima, presupuesto e i
 |---|---|
 | Frontend | Angular 22 (signals, componentes standalone), TypeScript, SCSS con tokens de diseño (variables CSS), ilustraciones SVG propias por destino, streaming con `fetch` + `ReadableStream` |
 | Backend | Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2.0, Server-Sent Events |
-| IA | Loop agéntico propio con tool calling; Claude (Anthropic) y una cadena de modelos gratuitos con API compatible con OpenAI (Gemini → Groq → Hugging Face, OpenRouter o DeepSeek); modo demo sin modelo |
+| IA | LangChain 1.x (`create_agent`, middleware, `StructuredTool`), LangSmith para trazas; Claude (Anthropic) y una cadena de modelos gratuitos (Gemini → Groq → DeepSeek vía OpenRouter); modo demo sin modelo |
 | RAG | Chunking por secciones, BM25 + embeddings (Voyage AI o local) fusionados con RRF, pgvector, evals de recuperación |
 | Datos | PostgreSQL + pgvector (SQLite en local), Redis para sesiones, bloqueos y límites de uso |
 | Infra | Docker multi-stage, Docker Compose, Kubernetes (kustomize, HPA, Ingress, probes), nginx, Render |
@@ -29,9 +29,9 @@ Agente de IA que **planifica viajes completos** (destino, clima, presupuesto e i
 
 ## Qué demuestra este proyecto
 
-- **Agente con herramientas sin frameworks.** El loop (modelo → herramientas → resultados → modelo) está implementado a mano en `backend/app/agent/loop.py`, sin LangChain, para controlar cada paso: límite de iteraciones, errores que vuelven al modelo para que se corrija y un historial que solo se guarda si el turno termina bien.
+- **Agente con LangChain.** `create_agent` hace el bucle (modelo → herramientas → resultados → modelo) en `backend/app/agent/agent.py`, que solo define el prompt, las herramientas y el middleware, y traduce cada paso a un evento para la interfaz. Se mantiene el control de cada paso: límite de iteraciones, errores que vuelven al modelo para que se corrija y un historial que solo se guarda si el turno termina bien. Con LangSmith activado, cada conversación queda trazada (herramientas, argumentos, tokens y tiempos).
 - **RAG híbrido hecho a mano.** Búsqueda BM25 + embeddings fusionada con Reciprocal Rank Fusion, vectores en PostgreSQL/pgvector, citas de la fuente en cada respuesta y evals de recuperación que bloquean la CI si la calidad baja. Detalles en [RAG](#rag-guías-prácticas-de-cada-destino).
-- **Proveedor de modelo intercambiable.** El loop habla con una interfaz `ModelProvider` con tres implementaciones: Claude (`AnthropicProvider`), cualquier API compatible con OpenAI como Gemini, Groq o Hugging Face (`OpenAICompatibleProvider`) y un **modo demo** sin API key. Los proveedores configurados forman una **cadena**: si uno agota su cuota o no responde, el turno sigue con el siguiente sin que el usuario note nada más que un aviso. El historial se guarda en un formato neutro, así que se puede cambiar de proveedor a mitad de una conversación.
+- **Modelo intercambiable.** Cada proveedor es un modelo de chat de LangChain: `ChatAnthropic` (Claude), `ChatGoogleGenerativeAI` (Gemini), `ChatOpenAI` para cualquier API compatible con OpenAI (Groq, DeepSeek vía OpenRouter...) y `DemoChatModel`, un **modo demo** sin API key. Un middleware propio (`ModelChainMiddleware`) los encadena: si uno agota su cuota o no responde, el turno sigue con el siguiente sin que el usuario note nada más que un aviso. El historial se guarda como mensajes de LangChain, así que se puede cambiar de proveedor a mitad de una conversación.
 - **IA real gratis y sin sorpresas.** Anti-flood por IP, cupo de IA real por persona y presupuesto diario de tokens por debajo de la cuota gratuita, con paso automático al modo demo. Detalles en [Modelo gratuito y protección](#modelo-gratuito-y-protección-frente-a-abusos).
 - **Guardarraíles: el servidor no confía en el modelo para lo importante.** El viaje se recalcula en el servidor en lugar de usar datos largos generados por el modelo; si el modelo genera el itinerario pero olvida guardarlo, lo guarda el servidor; el agente rechaza los temas ajenos a los viajes. Detalles en [Guardarraíles](#guardarraíles).
 - **Herramientas tipadas con Pydantic.** Cada herramienta se define una vez con un modelo Pydantic: de ahí sale el JSON Schema que ve el modelo y la validación de lo que devuelve. Si el modelo envía argumentos inválidos, recibe el error y reintenta.
@@ -39,7 +39,7 @@ Agente de IA que **planifica viajes completos** (destino, clima, presupuesto e i
 - **Observabilidad.** Cada ejecución guarda pasos, llamadas a herramientas, errores, tokens y duración (`/api/stats`). La traza muestra cada paso en directo y la cabecera, la tasa de éxito, el consumo y el modo activo.
 - **Backend sin estado, listo para escalar.** El historial de cada conversación, su bloqueo y los contadores de uso viven en Redis, y los datos en PostgreSQL. Cualquier réplica puede atender el siguiente mensaje, así que el backend escala horizontalmente. Probado con 3 réplicas atendiendo la misma conversación.
 - **Preparado para Kubernetes.** Probes de liveness (`/api/health`) y readiness (`/api/ready`, que comprueba PostgreSQL y Redis), recursos limitados, usuario sin privilegios, autoescalado (HPA), Ingress con streaming y creación de tablas segura con varias réplicas arrancando a la vez (advisory lock de PostgreSQL).
-- **Calidad.** 90 tests de backend (pytest) y 6 de frontend (Vitest), evals del RAG, lint con Ruff, validación de manifiestos con kubeconform y CI en GitHub Actions. Los cambios entran por Pull Request con la CI en verde.
+- **Calidad.** 78 tests de backend (pytest) y 6 de frontend (Vitest), evals del RAG, lint con Ruff, validación de manifiestos con kubeconform y CI en GitHub Actions. Los cambios entran por Pull Request con la CI en verde.
 
 ## Arquitectura
 
@@ -53,12 +53,13 @@ flowchart LR
   Store -- "POST /api/chat (SSE)" --> API
   subgraph Backend [FastAPI]
     API[API] --> Limits[Límites de uso]
-    API --> Loop[Loop agéntico]
-    Loop --> Guard[Modelo protegido · presupuesto y fallback]
-    Guard --> Provider{ModelProvider}
+    API --> Loop[Agente LangChain · create_agent]
+    Loop --> Guard[Middleware · presupuesto y cadena de modelos]
+    Guard --> Provider{Modelos de chat LangChain}
     Provider --> Claude[Claude]
     Provider --> OAI[Gemini → Groq → extra]
     Provider --> Demo[Modo demo]
+    Loop -.-> LangSmith[LangSmith · trazas]
     Loop --> Tools[Herramientas Pydantic]
     Tools --> Data[(Destinos)]
     Tools --> DB[(PostgreSQL)]
@@ -112,20 +113,20 @@ Documentación interactiva (OpenAPI) en `/docs` al arrancar el backend.
 
 ## Modelo gratuito y protección frente a abusos
 
-Para que la demo pública use un modelo real **sin coste**, Rumbo encadena planes gratuitos a través de `OpenAICompatibleProvider`. Se usan todos los proveedores que tengan clave, en este orden:
+Para que la demo pública use un modelo real **sin coste**, Rumbo encadena planes gratuitos con los modelos de chat de LangChain (`ChatGoogleGenerativeAI`, `ChatOpenAI`...). Se usan todos los proveedores que tengan clave, en este orden:
 
 | Orden | Proveedor | Variables | Modelo por defecto |
 |---|---|---|---|
 | 1 | Claude (de pago, opcional) | `ANTHROPIC_API_KEY`, `AGENT_MODEL` | `claude-sonnet-5-5` |
 | 2 | [Gemini](https://aistudio.google.com) (gratis, sin tarjeta) | `GEMINI_API_KEY`, `GEMINI_MODEL` | `gemini-flash-latest` |
 | 3 | [Groq](https://console.groq.com) (gratis, sin tarjeta) | `GROQ_API_KEY`, `GROQ_MODEL` | `openai/gpt-oss-120b` |
-| 4 | Extra: cualquier API compatible con OpenAI | `EXTRA_LLM_API_KEY`, `EXTRA_LLM_NAME`, `EXTRA_LLM_BASE_URL`, `EXTRA_LLM_MODEL` | Hugging Face (`https://router.huggingface.co/v1`), `openai/gpt-oss-120b` |
+| 4 | [DeepSeek](https://openrouter.ai) vía OpenRouter (gratis, sin tarjeta) | `EXTRA_LLM_API_KEY` (y, para otro proveedor, `EXTRA_LLM_NAME`, `EXTRA_LLM_BASE_URL`, `EXTRA_LLM_MODEL`) | `deepseek/deepseek-v4-flash:free` en `https://openrouter.ai/api/v1` |
 | — | Modo demo | — | Sin coste |
 
 - **Paso al siguiente:** si un proveedor agota su cuota (429 con espera larga o 402 sin créditos), no responde (5xx, timeouts) o rechaza la clave (401/403), entra en pausa por su cuenta (`cooldown` por proveedor) y el turno sigue con el siguiente; la traza lo avisa ("Gemini ha alcanzado su cuota gratuita: continúo con Groq"). Las peticiones nuevas empiezan directamente por el primero que no esté en pausa.
-- **Proveedor extra:** por defecto el router de [Hugging Face](https://huggingface.co/docs/inference-providers) (token con permiso *Inference Providers*). Para otro, cambia la URL, el modelo y el nombre: por ejemplo OpenRouter (`https://openrouter.ai/api/v1`, con sus modelos `:free`) o DeepSeek (`https://api.deepseek.com`). Ojo: los créditos gratuitos de Hugging Face son pequeños y la API de DeepSeek es de pago por uso, así que conviene dejarlo como último recurso.
+- **DeepSeek:** la API directa de DeepSeek es de prepago, así que el tercer modelo usa su versión gratuita en OpenRouter (modelos `:free`). Es un hueco genérico para cualquier API compatible con OpenAI: para otro proveedor, cambia la URL, el modelo y el nombre.
 
-- **Gemini 3:** las llamadas a herramientas llevan una *thought signature* que hay que reenviar en el siguiente turno; el proveedor la conserva en el historial y solo la envía a Gemini (otros proveedores podrían rechazar el campo).
+- **Gemini 3:** las llamadas a herramientas llevan una *thought signature* que hay que reenviar en el siguiente turno; de eso se encarga `langchain-google-genai`.
 - **Menos tokens por consulta:** el modelo recibe una vista compacta de los resultados grandes (el itinerario pasa de ~1.400 a ~500 caracteres), mientras que la interfaz recibe el detalle completo. Como cada resultado se reenvía en todas las llamadas siguientes del turno, el ahorro se multiplica.
 - **Razonamiento en nivel bajo** (`reasoning_effort: low`) para no gastar cuota en tokens de razonamiento.
 
@@ -139,9 +140,21 @@ Sin método de pago en el proveedor no hay factura posible. Además, la app se p
 
 - La IP real se obtiene de `CF-Connecting-IP` detrás de Cloudflare (Render) o de la última entrada de `X-Forwarded-For` detrás de un proxy propio (nginx, Ingress). Aunque alguien falseara la cabecera, el presupuesto global sigue limitando el gasto total.
 - Los tokens servidos desde la caché del proveedor no se descuentan, porque el proveedor tampoco los cuenta en sus cuotas.
-- Si el proveedor responde 429 con una espera corta (límite por minuto), el agente espera y reintenta; si la espera es larga, ese proveedor entra en *cooldown* y el turno continúa con el siguiente de la cadena o, si no quedan, en modo demo, sin error (`app/agent/guard.py`).
+- Si el proveedor responde 429 con una espera corta (límite por minuto), el cliente de LangChain espera y reintenta; si sigue fallando, ese proveedor entra en *cooldown* y el turno continúa con el siguiente de la cadena o, si no quedan, en modo demo, sin error (`app/agent/middleware.py`).
 - Los contadores van en Redis si hay `REDIS_URL` (compartidos entre réplicas) y en memoria si no.
 - La cabecera muestra "IA real · modelo · te quedan N" o "Modo demo", y los avisos aparecen en el chat y en la traza.
+
+## Trazas con LangSmith
+
+LangChain envía cada ejecución del agente a [LangSmith](https://smith.langchain.com) sin tocar el código: basta con definir tres variables en `backend/.env` (nunca en `.env.example`, que sí se sube a git):
+
+```
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=lsv2_...
+LANGSMITH_PROJECT=rumbo-ai
+```
+
+En cada traza se ve el prompt, cada llamada al modelo, las herramientas que eligió con sus argumentos y resultados, los tokens y la duración de cada paso.
 
 ## Guardarraíles
 
@@ -305,10 +318,10 @@ cd backend && python -m evals.rag_eval    # evals del RAG
 cd frontend && npx ng test --watch=false
 ```
 
-Ningún test llama a un modelo real: se usan proveedores falsos con turnos predefinidos y transportes HTTP simulados con el formato de cada API.
+Ningún test llama a un modelo real: se usan modelos de chat falsos de LangChain con respuestas predefinidas (`tests/fakes.py`).
 
-- **Agente:** autocorrección tras un error de herramienta, límite de iteraciones, historial intacto si la API falla, guardado del viaje por el servidor y rechazo de temas ajenos.
-- **Proveedores:** traducción del historial al formato de OpenAI, tool calls, *thought signatures* de Gemini, 429 con `retry-after` en cabecera y en el mensaje, 402/401 como cuota agotada o clave inválida, reintento ante llamadas mal formadas y la cadena de proveedores (paso al siguiente, pausas por proveedor y modo demo al final).
+- **Agente:** autocorrección tras un error de herramienta o argumentos inválidos, resultados compactos para el modelo y completos para la interfaz, límite de iteraciones, guardado del viaje por el servidor y rechazo de temas ajenos.
+- **Cadena de modelos:** 429 con `retry-after`, 402 como cuota agotada, 5xx como caída, paso al siguiente proveedor, pausas por proveedor, presupuesto agotado y modo demo al final; los proveedores se crean como modelos de chat de LangChain.
 - **Protección:** anti-flood, cupos por IP con reloj simulado (memoria y Redis), presupuesto de tokens, *cooldown* y paso al modo demo de punta a punta.
 - **RAG:** chunking, ingesta incremental, búsqueda híbrida, degradación a BM25, cliente de Voyage y, en la CI, el almacén pgvector contra un PostgreSQL real.
 - **Sesiones:** dos réplicas comparten la conversación a través de Redis.
@@ -317,11 +330,11 @@ Ningún test llama a un modelo real: se usan proveedores falsos con turnos prede
 
 ```
 backend/
-  app/agent/loop.py        Loop agéntico (generador de eventos) y guardado del viaje por el servidor
-  app/agent/tools.py       Herramientas + esquemas Pydantic + vista compacta para el modelo
-  app/agent/providers.py   Interfaz de modelo + Claude + APIs compatibles con OpenAI (Gemini, Groq, Hugging Face...)
-  app/agent/guard.py       Modelo real con presupuesto, reintentos y paso automático al modo demo
-  app/agent/demo.py        Proveedor demo sin API key
+  app/agent/agent.py       Agente con LangChain (create_agent), eventos para la traza y guardado del viaje por el servidor
+  app/agent/tools.py       Herramientas + esquemas Pydantic + vista compacta para el modelo + conversión a LangChain
+  app/agent/models.py      Modelos de chat de LangChain: Claude, Gemini, APIs compatibles con OpenAI y demo
+  app/agent/middleware.py  Middleware: cadena de modelos, presupuesto de tokens y paso automático al modo demo
+  app/agent/demo.py        Modo demo sin API key (DemoChatModel)
   app/limits.py            Anti-flood, cupo por IP y presupuesto diario de tokens
   app/main.py              API FastAPI + SSE
   app/db.py                SQLAlchemy 2.0 (viajes y trazas)
@@ -362,6 +375,7 @@ Las páginas son contenedores que conectan los stores con componentes presentaci
 | 1.3 | Gemini como proveedor gratuito, resultados compactos para el modelo (menos tokens por consulta), guardado del viaje garantizado por el servidor y guardarraíl de alcance |
 | 1.4 | Cadena de proveedores gratuitos (Gemini → Groq → Hugging Face u otro compatible con OpenAI) con pausa por proveedor: al agotarse uno, sigue el siguiente antes de pasar al modo demo |
 | 1.5 | Nueva identidad visual de app de viajes: tema claro marino + ámbar con acentos naranja y un azul suave, colores centralizados en variables CSS, cabecera del viaje con una ilustración minimalista de cada ciudad (escritorio y móvil) y logo de catalejo |
+| 1.6 | Agente migrado a LangChain 1.x (`create_agent` + middleware) con trazas en LangSmith: el bucle y la traducción entre proveedores escritos a mano se sustituyen por LangChain, sin cambios en la interfaz |
 
 ## Limitaciones conocidas
 
