@@ -142,7 +142,8 @@ Sin método de pago en el proveedor no hay factura posible. Además, la app se p
 - Los tokens servidos desde la caché del proveedor no se descuentan, porque el proveedor tampoco los cuenta en sus cuotas.
 - Si el proveedor responde 429 con una espera corta (límite por minuto), el cliente de LangChain espera y reintenta; si sigue fallando, ese proveedor entra en *cooldown* y el turno continúa con el siguiente de la cadena o, si no quedan, en modo demo, sin error (`app/agent/middleware.py`).
 - Los contadores van en Redis si hay `REDIS_URL` (compartidos entre réplicas) y en memoria si no.
-- La cabecera muestra "IA real · modelo · te quedan N" o "Modo demo", y los avisos aparecen en el chat y en la traza.
+- La cabecera muestra el modelo que responde ("Gemini 3.5 Flash-Lite", "GPT-OSS 120B · Groq") o el modo demo y su motivo. Al pulsarlo se ve toda la cadena con el estado de cada modelo (en uso, de respaldo o en pausa y cuándo vuelve), las llamadas que le quedan hoy de su plan gratuito, las consultas que le quedan al usuario y las cifras del agente; desde ahí también se puede probar el modo demo (o abrir la web con `?demo`). Los cambios de modelo aparecen además como avisos en la traza.
+- Las llamadas que quedan son orientativas: Rumbo cuenta las suyas frente al límite diario de cada plan (`GEMINI_DAILY_REQUESTS`, `GROQ_DAILY_REQUESTS`, `EXTRA_LLM_DAILY_REQUESTS`; por defecto 500, 1.000 y 50). Groq y OpenRouter publican esos límites; el de Gemini solo se ve en AI Studio, así que 500 es una estimación.
 
 ## Trazas con LangSmith
 
@@ -347,7 +348,7 @@ k8s/                       Manifiestos de Kubernetes (kustomize)
 frontend/
   src/app/app.config.ts    Raíz de composición: enchufa cada puerto con su adaptador
   src/app/app.routes.ts    Rutas de la SPA: /, /viajes y /viajes/:id (carga perezosa)
-  src/app/layout/          Cabecera fija (navegación, cifras y selector de modo)
+  src/app/layout/          Cabecera fija (navegación, modelo en uso con la cadena y su cuota, y cifras)
   src/app/core/status/     Estado del servicio: modo, cupo y estadísticas
   src/app/features/
     planner/               Chat y traza del agente

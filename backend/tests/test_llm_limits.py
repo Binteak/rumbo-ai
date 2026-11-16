@@ -31,6 +31,7 @@ def test_chain_spends_uncached_tokens():
     events, stats = run(agent, "hola")
     assert events[-1]["text"] == "hola" and agent.current.name == "groq"
     assert budget.spent == 100 - 40 + 10 and stats.input_tokens == 100
+    assert budget.calls == ["groq"]  # cuenta la llamada para mostrar la cuota que queda
 
 
 def test_chain_falls_back_to_demo_on_rate_limit():
@@ -149,6 +150,17 @@ def test_cooldown_blocks_real_ai(limits):
     assert lim.can_start_run()
 
 
+def test_calls_are_counted_per_provider_and_day(limits):
+    lim, clock = limits
+    lim.record_call("groq")
+    lim.record_call("groq")
+    lim.record_call("gemini")
+    assert (lim.calls_today("groq"), lim.calls_today("gemini"), lim.calls_today("deepseek")) == (2, 1, 0)
+    if isinstance(lim.store, MemoryCounterStore):
+        clock.t += 86_400
+        assert lim.calls_today("groq") == 0  # nuevo día
+
+
 def test_client_ip_uses_last_forwarded_entry():
     assert client_ip({"x-forwarded-for": "6.6.6.6, 9.9.9.9"}, "10.0.0.1") == "9.9.9.9"
     assert client_ip({}, "10.0.0.1") == "10.0.0.1"
@@ -160,6 +172,7 @@ def test_provider_cooldown_is_per_provider(limits):
     lim, _ = limits
     lim.cooldown(600, "gemini")
     assert lim.cooling_down("gemini") and not lim.cooling_down("groq") and not lim.cooling_down()
+    assert 590 <= lim.cooldown_remaining("gemini") <= 600 and lim.cooldown_remaining("groq") == 0
     assert lim.can_start_run()  # el resto de la cadena sigue disponible
 
 
@@ -211,7 +224,9 @@ def test_flood_returns_429(real_ai):
 
 def test_usage_in_demo_mode():
     with TestClient(main.app) as client:
-        assert client.get("/api/usage").json() == {"mode": "demo", "model": "rumbo-demo", "real_ai": False}
+        usage = client.get("/api/usage").json()
+        assert (usage["mode"], usage["model"], usage["real_ai"]) == ("demo", "rumbo-demo", False)
+        assert usage["providers"] == [{"name": "demo", "label": "Modo demo", "model": "rumbo-demo", "status": "active"}]
 
 
 def test_api_skips_provider_in_cooldown(monkeypatch):
@@ -224,8 +239,13 @@ def test_api_skips_provider_in_cooldown(monkeypatch):
     with TestClient(main.app) as client:
         usage = client.get("/api/usage").json()
         assert usage["mode"] == "groq" and usage["chain"] == ["gemini", "groq"] and usage["real_ai"] is True
+        states = {p["name"]: p["status"] for p in usage["providers"]}
+        assert states == {"gemini": "paused", "groq": "active", "demo": "standby"}
+        assert usage["providers"][0]["paused_seconds"] > 3500
         events = sse(client.post("/api/chat", json={"message": "hola"}).text)
         assert events[0]["mode"] == "groq" and events[-2]["text"] == "Respuesta de groq"
+        groq_status = client.get("/api/usage").json()["providers"][1]
+        assert groq_status["calls_today"] == 1 and groq_status["daily_limit"] is None
         lim.cooldown(3600, "groq")
         events = sse(client.post("/api/chat", json={"message": "hola"}).text)
         assert events[0]["mode"] == "demo" and "agotado su cuota" in events[1]["text"]
@@ -248,6 +268,7 @@ def test_providers_are_langchain_chat_models():
     providers = build_real_providers(s)
     assert [p.name for p in providers] == ["claude", "gemini", "groq", "deepseek"]
     assert [type(p.llm).__name__ for p in providers] == ["ChatAnthropic", "ChatGoogleGenerativeAI", "ChatOpenAI", "ChatOpenAI"]
+    assert [p.daily_requests for p in providers] == [None, 500, 1000, 50]
     assert providers[3].label == "DeepSeek" and providers[3].model == "deepseek/deepseek-v4-flash:free"
 
 

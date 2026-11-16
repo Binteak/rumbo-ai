@@ -30,6 +30,7 @@ class Budget(Protocol):
     def spend(self, tokens: int) -> None: ...
     def cooldown(self, seconds: float, provider: str | None = None) -> None: ...
     def cooling_down(self, provider: str | None = None) -> bool: ...
+    def record_call(self, provider: str) -> None: ...
 
 
 class NoBudget:
@@ -46,6 +47,9 @@ class NoBudget:
 
     def cooling_down(self, provider: str | None = None) -> bool:
         return False
+
+    def record_call(self, provider: str) -> None:
+        pass
 
 
 class ModelChainMiddleware(AgentMiddleware):
@@ -77,6 +81,7 @@ class ModelChainMiddleware(AgentMiddleware):
                 self._notify(f"{provider.label} {reason}: continúo con {self._target()}.")
                 continue
             self.budget.spend(_tokens_used(response))
+            self.budget.record_call(provider.name)
             return response
         return handler(request.override(model=self.demo.llm))
 

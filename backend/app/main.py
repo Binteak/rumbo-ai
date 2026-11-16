@@ -190,18 +190,38 @@ def usage(request: Request) -> dict:
     """Modo con el que se responderá a quien pregunta y cuántas consultas con IA real le quedan."""
     ip = client_ip(request.headers, request.client.host if request.client else None)
     if not real_providers:
-        return {"mode": "demo", "model": demo.model, "real_ai": False}
+        return {"mode": "demo", "model": demo.model, "real_ai": False, "providers": [provider_status(demo, True)]}
     mine = limits.ip_remaining(ip)
     chain = available_providers()
     # El primero disponible es el que atenderá la próxima consulta.
     current = chain[0] if chain else real_providers[0]
+    real_ai = bool(chain) and limits.can_start_run() and min(mine.values()) > 0
     return {
         "mode": current.name,
         "model": current.model,
         "chain": [p.name for p in real_providers],
-        "real_ai": bool(chain) and limits.can_start_run() and min(mine.values()) > 0,
+        "real_ai": real_ai,
         "remaining": mine,
+        # Toda la cadena, con el estado y la cuota que le queda a cada modelo, y el demo al final.
+        "providers": [provider_status(p, real_ai and p is current) for p in real_providers]
+        + [provider_status(demo, not real_ai)],
         **limits.status(),
+    }
+
+
+def provider_status(p: Provider, active: bool) -> dict:
+    """Estado de un modelo de la cadena: si responde ahora, si está en pausa y cuánto ha usado hoy."""
+    if p is demo:
+        return {"name": p.name, "label": "Modo demo", "model": p.model, "status": "active" if active else "standby"}
+    paused = limits.cooldown_remaining(p.name)
+    return {
+        "name": p.name,
+        "label": p.label,
+        "model": p.model,
+        "status": "active" if active else "paused" if paused else "standby",
+        "paused_seconds": paused,
+        "calls_today": limits.calls_today(p.name),
+        "daily_limit": p.daily_requests or None,
     }
 
 

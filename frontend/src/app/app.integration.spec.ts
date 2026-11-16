@@ -99,7 +99,7 @@ describe('Rumbo de principio a fin', () => {
     expect(el.querySelector('.trip-empty h1')?.textContent).toBe(
       'Planifica un viaje con un agente de IA',
     );
-    expect(el.querySelector('.mode')?.textContent).toContain('Modo demo · rumbo-demo');
+    expect(el.querySelector('.mode')?.textContent).toContain('Modo demo');
 
     // 2. El usuario pide un viaje.
     await write('3 días en Seúl en mayo');

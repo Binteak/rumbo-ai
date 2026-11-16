@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     extra_llm_model: str = "deepseek/deepseek-v4-flash:free"
     extra_llm_base_url: str = "https://openrouter.ai/api/v1"
     llm_max_output_tokens: int = 2048
+    # Llamadas al día de cada plan gratuito, para mostrar cuánto queda (0: no mostrar límite).
+    # Groq (gpt-oss-120b) y OpenRouter (modelos :free sin créditos comprados) publican 1.000 y 50;
+    # Google no publica el de Gemini en su documentación (se ve en AI Studio): 500 es una estimación.
+    gemini_daily_requests: int = 500
+    groq_daily_requests: int = 1000
+    extra_llm_daily_requests: int = 50
 
     # Protección y presupuesto (ver app/limits.py). El presupuesto diario por defecto deja margen
     # bajo los 200.000 tokens/día del plan gratuito de Groq.

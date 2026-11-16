@@ -4,6 +4,9 @@ import {
   answersInDemo,
   currentProvider,
   isRealAvailable,
+  formatWait,
+  prettyModelName,
+  quotaText,
   resolveMode,
   shortModelName,
 } from './system-status';
@@ -42,5 +45,27 @@ describe('reglas del estado del servicio', () => {
     expect(shortModelName(groq, demoHealth)).toBe('gpt-oss-120b');
     expect(shortModelName(null, demoHealth)).toBe('rumbo-demo');
     expect(shortModelName(null, null)).toBe('');
+  });
+
+  it('da a cada modelo su nombre de producto', () => {
+    expect(prettyModelName('gemini-3.5-flash-lite')).toBe('Gemini 3.5 Flash-Lite');
+    expect(prettyModelName('openai/gpt-oss-120b')).toBe('GPT-OSS 120B');
+    expect(prettyModelName('deepseek/deepseek-v4-flash:free')).toBe('DeepSeek V4 Flash');
+    expect(prettyModelName('claude-sonnet-5-5')).toBe('Claude Sonnet 5.5');
+    expect(prettyModelName('gemini-flash-latest')).toBe('Gemini Flash (última)');
+    expect(prettyModelName('rumbo-demo')).toBe('Modo demo');
+  });
+
+  it('describe la cuota que le queda a cada modelo', () => {
+    const base = { name: 'groq', label: 'Groq', model: 'openai/gpt-oss-120b' };
+    expect(quotaText({ ...base, status: 'active', callsToday: 1200, dailyLimit: 1000 })).toBe(
+      '≈ 0 de 1000 llamadas hoy',
+    );
+    expect(quotaText({ ...base, status: 'standby', callsToday: 0 })).toBe('0 llamadas hoy');
+    expect(quotaText({ ...base, status: 'paused', pausedSeconds: 30 })).toBe(
+      'En pausa · vuelve en 1 min',
+    );
+    expect(formatWait(3600)).toBe('1 h');
+    expect(formatWait(5400)).toBe('1 h 30 min');
   });
 });

@@ -1,4 +1,4 @@
-import { GlobalStats, Health, Usage } from '../domain/system-status';
+import { GlobalStats, Health, ProviderState, ProviderStatus, Usage } from '../domain/system-status';
 
 /** Formas exactas de las respuestas del backend (snake_case). Solo se usan en esta capa. */
 
@@ -15,6 +15,17 @@ export interface UsageDto {
   chain?: string[];
   remaining?: { hour: number; day: number };
   budget_remaining_pct?: number;
+  providers?: ProviderStatusDto[];
+}
+
+export interface ProviderStatusDto {
+  name: string;
+  label: string;
+  model: string;
+  status: ProviderState;
+  paused_seconds?: number;
+  calls_today?: number;
+  daily_limit?: number | null;
 }
 
 export interface GlobalStatsDto {
@@ -40,6 +51,19 @@ export function toUsage(dto: UsageDto): Usage {
     chain: dto.chain,
     remaining: dto.remaining,
     budgetRemainingPct: dto.budget_remaining_pct,
+    providers: dto.providers?.map(toProviderStatus),
+  };
+}
+
+function toProviderStatus(dto: ProviderStatusDto): ProviderStatus {
+  return {
+    name: dto.name,
+    label: dto.label,
+    model: dto.model,
+    status: dto.status,
+    pausedSeconds: dto.paused_seconds,
+    callsToday: dto.calls_today,
+    dailyLimit: dto.daily_limit,
   };
 }
 
