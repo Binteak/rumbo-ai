@@ -8,60 +8,105 @@
   </a>
 
   <nav class="nav" aria-label="Secciones">
-    <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Planificador</a>
+    <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"
+      >Planificador</a
+    >
     <a routerLink="/viajes" routerLinkActive="active">Mis viajes</a>
   </nav>
 
-  @if (status.stats(); as s) {
-    <div class="kpis">
-      <span><b>{{ s.runs }}</b> ejecuciones</span>
-      <span><b>{{ s.successRate === null ? '—' : (s.successRate | percent) }}</b> éxito</span>
-      <span><b>{{ s.avgIterations }}</b> pasos medios</span>
-      <span><b>{{ s.tokens | number }}</b> tokens</span>
-    </div>
-  }
-
-  @if (status.realAvailable() && !status.demoOnly()) {
-    <div class="mode-switch" role="group" aria-label="Modo del agente">
+  @if (status.health()) {
+    <div class="model" #model>
       <button
         type="button"
-        [class.active]="status.preferredMode() === 'demo'"
-        [attr.aria-pressed]="status.preferredMode() === 'demo'"
-        [disabled]="chat.running()"
-        title="Respuestas con reglas, instantáneas y sin coste"
-        (click)="status.setMode('demo')"
+        class="mode"
+        [class.demo]="status.isDemo()"
+        aria-controls="model-panel"
+        [attr.aria-expanded]="modelOpen()"
+        [attr.aria-label]="'Modelo en uso: ' + chipText() + '. Ver todos los modelos y su cuota'"
+        (click)="toggleModel()"
       >
-        Demo
+        <i></i>{{ chipText() }}
+        <svg class="chevron" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          <path
+            d="M6 9l6 6 6-6"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          />
+        </svg>
       </button>
-      <button
-        type="button"
-        [class.active]="status.preferredMode() === 'real'"
-        [attr.aria-pressed]="status.preferredMode() === 'real'"
-        [disabled]="chat.running()"
-        [title]="'Respuestas con ' + status.modelLabel()"
-        (click)="status.setMode('real')"
-      >
-        {{ providerLabel() }}
-      </button>
-    </div>
-  }
 
-  @if (status.health(); as h) {
-    @let u = status.usage();
-    <span class="mode" [class.demo]="status.isDemo()" [title]="modeHint()">
-      @if (!status.isDemo()) {
-        <i></i>IA real · {{ status.modelLabel() }}
-        @if (u?.remaining; as r) {
-          · te quedan {{ r.hour }}
-        }
-      } @else if ((status.demoOnly() || status.preferredMode() === 'demo') && status.realAvailable()) {
-        <i></i>Modo demo · sin coste
-      } @else if (u && u.provider !== demoProvider) {
-        <i></i>Modo demo · cupo de IA real agotado
-      } @else {
-        <i></i>Modo demo · {{ h.model }}
+      @if (modelOpen()) {
+        <div class="model-panel" id="model-panel" role="dialog" aria-label="Modelos de IA">
+          <strong>Modelos de IA</strong>
+          @if (status.chain().length) {
+            <ul class="chain">
+              @for (p of status.chain(); track p.name) {
+                <li [class]="p.status">
+                  <i></i>
+                  <div>
+                    <span class="name">{{
+                      p.name === demoProvider ? 'Modo demo' : modelTitle(p.model, p.label)
+                    }}</span>
+                    <small>{{ quota(p) }}</small>
+                  </div>
+                  @if (p.status === 'active') {
+                    <span class="tag">En uso</span>
+                  }
+                </li>
+              }
+            </ul>
+            <p class="hint">
+              Si un modelo agota su cuota gratuita, el agente pasa al siguiente sin cortar la
+              conversación.
+            </p>
+          }
+
+          @if (!status.isDemo() && status.usage()?.remaining; as r) {
+            <p class="mine">
+              Tus consultas con IA real: quedan <b>{{ r.hour }}</b> esta hora y
+              <b>{{ r.day }}</b> hoy.
+            </p>
+          }
+
+          @if (status.stats(); as s) {
+            <dl class="kpis">
+              <div>
+                <dt>Ejecuciones</dt>
+                <dd>{{ s.runs }}</dd>
+              </div>
+              <div>
+                <dt>Éxito</dt>
+                <dd>{{ s.successRate === null ? '—' : (s.successRate | percent) }}</dd>
+              </div>
+              <div>
+                <dt>Pasos medios</dt>
+                <dd>{{ s.avgIterations }}</dd>
+              </div>
+              <div>
+                <dt>Tokens</dt>
+                <dd>{{ s.tokens | number }}</dd>
+              </div>
+            </dl>
+          }
+
+          @if (status.demoOnly() && status.realAvailable()) {
+            <p class="note">
+              En el móvil Rumbo funciona en modo demo. La IA real está disponible en escritorio.
+            </p>
+          } @else if (status.realAvailable()) {
+            <button type="button" class="switch" [disabled]="chat.running()" (click)="toggleDemo()">
+              {{
+                status.preferredMode() === 'demo'
+                  ? 'Volver a la IA real'
+                  : 'Probar en modo demo (sin coste)'
+              }}
+            </button>
+          }
+        </div>
       }
-    </span>
+    </div>
   } @else {
     <span class="mode off"><i></i>Backend desconectado</span>
   }
@@ -73,7 +118,7 @@
       aria-label="Información sobre el servicio"
       aria-controls="info-panel"
       [attr.aria-expanded]="infoOpen()"
-      (click)="infoOpen.set(!infoOpen())"
+      (click)="toggleInfo()"
     >
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
         <circle cx="12" cy="12" r="9.25" fill="none" stroke="currentColor" stroke-width="1.5" />
@@ -82,14 +127,22 @@
       </svg>
     </button>
     @if (infoOpen()) {
-      <div class="info-panel" id="info-panel" role="dialog" aria-label="Información sobre el servicio">
+      <div
+        class="info-panel"
+        id="info-panel"
+        role="dialog"
+        aria-label="Información sobre el servicio"
+      >
         <strong>¿La app no responde?</strong>
         <p>
-          El backend está en un plan gratuito y se suspende por inactividad, sobre todo a partir de las 19:00. Si ves
-          «Backend desconectado» o el agente no contesta, refresca la página y espera unos segundos a que despierte.
+          El backend está en un plan gratuito y se suspende por inactividad, sobre todo a partir de
+          las 19:00. Si ves «Backend desconectado» o el agente no contesta, refresca la página y
+          espera unos segundos a que despierte.
         </p>
         @if (status.demoOnly()) {
-          <p class="info-note">En el móvil Rumbo funciona solo en modo demo. La IA real está disponible en escritorio.</p>
+          <p class="info-note">
+            En el móvil Rumbo funciona solo en modo demo. La IA real está disponible en escritorio.
+          </p>
         }
         <button type="button" class="info-reload" (click)="reload()">Refrescar página</button>
       </div>

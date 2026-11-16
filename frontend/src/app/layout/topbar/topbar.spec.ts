@@ -63,6 +63,52 @@ describe('Topbar', () => {
   }
 
   const mode = () => el.querySelector('.mode')?.textContent?.replace(/\s+/g, ' ').trim();
+  const openPanel = async () => {
+    el.querySelector<HTMLButtonElement>('button.mode')!.click();
+    await fixture.whenStable();
+    return el.querySelector('.model-panel')!;
+  };
+  const rows = () =>
+    [...el.querySelectorAll('.chain li')].map((li) => [
+      li.className,
+      li.querySelector('.name')?.textContent?.trim(),
+      li.querySelector('small')?.textContent?.trim(),
+    ]);
+
+  const chainUsage: Usage = {
+    provider: 'gemini',
+    model: 'gemini-3.5-flash-lite',
+    realAi: true,
+    remaining: { hour: 4, day: 12 },
+    providers: [
+      {
+        name: 'gemini',
+        label: 'Gemini',
+        model: 'gemini-3.5-flash-lite',
+        status: 'active',
+        callsToday: 23,
+        dailyLimit: 500,
+      },
+      {
+        name: 'groq',
+        label: 'Groq',
+        model: 'openai/gpt-oss-120b',
+        status: 'paused',
+        pausedSeconds: 720,
+        callsToday: 1000,
+        dailyLimit: 1000,
+      },
+      {
+        name: 'deepseek',
+        label: 'DeepSeek',
+        model: 'deepseek/deepseek-v4-flash:free',
+        status: 'standby',
+        callsToday: 1,
+        dailyLimit: null,
+      },
+      { name: 'demo', label: 'Modo demo', model: 'rumbo-demo', status: 'standby' },
+    ],
+  };
 
   it('da nombre legible a los proveedores', () => {
     expect(providerLabel('huggingface')).toBe('Hugging Face');
@@ -70,7 +116,7 @@ describe('Topbar', () => {
     expect(providerLabel('')).toBe('IA real');
   });
 
-  it('enlaza las secciones y muestra las cifras globales', async () => {
+  it('enlaza las secciones', async () => {
     await render({ status: 'ok', provider: 'demo', model: 'rumbo-demo' }, null);
 
     const links = [...el.querySelectorAll<HTMLAnchorElement>('.nav a')].map((a) => [
@@ -81,41 +127,57 @@ describe('Topbar', () => {
       ['Planificador', '/'],
       ['Mis viajes', '/viajes'],
     ]);
-    // El formato español separa el porcentaje con un espacio no separable.
-    const kpis = [...el.querySelectorAll('.kpis b')].map((b) => b.textContent?.replace(/\s/g, ' '));
-    expect(kpis).toEqual(['12', '75 %', '3.2', '15.000']);
   });
 
-  it('con IA real indica el modelo y las consultas que quedan', async () => {
-    await render(
-      { status: 'ok', provider: 'groq', model: 'openai/gpt-oss-120b' },
-      {
-        provider: 'groq',
-        model: 'openai/gpt-oss-120b',
-        realAi: true,
-        remaining: { hour: 4, day: 12 },
-      },
-    );
+  it('muestra el modelo que responde con su nombre de producto, sin selector de modo', async () => {
+    await render({ status: 'ok', provider: 'gemini', model: 'gemini-3.5-flash-lite' }, chainUsage);
 
-    expect(mode()).toBe('IA real · gpt-oss-120b · te quedan 4');
-    expect(el.querySelector('.mode')?.getAttribute('title')).toContain(
-      '4 consultas esta hora y 12 hoy',
-    );
-    expect(el.querySelector('.mode-switch button.active')?.textContent?.trim()).toBe('Groq');
+    expect(mode()).toBe('Gemini 3.5 Flash-Lite');
+    expect(el.querySelector('.mode.demo')).toBeNull();
+    expect(el.querySelector('.mode-switch')).toBeNull();
   });
 
-  it('permite pasar al modo demo y lo recuerda', async () => {
+  it('añade quién sirve el modelo si el nombre no lo dice', async () => {
     await render(
       { status: 'ok', provider: 'groq', model: 'openai/gpt-oss-120b' },
       { provider: 'groq', model: 'openai/gpt-oss-120b', realAi: true },
     );
 
-    el.querySelector<HTMLButtonElement>('.mode-switch button')!.click();
+    expect(mode()).toBe('GPT-OSS 120B · Groq');
+  });
+
+  it('el panel enseña toda la cadena con la cuota de cada modelo, tus consultas y las cifras', async () => {
+    await render({ status: 'ok', provider: 'gemini', model: 'gemini-3.5-flash-lite' }, chainUsage);
+    const panel = await openPanel();
+
+    expect(rows()).toEqual([
+      ['active', 'Gemini 3.5 Flash-Lite', '≈ 477 de 500 llamadas hoy'],
+      ['paused', 'GPT-OSS 120B · Groq', 'En pausa · vuelve en 12 min'],
+      ['standby', 'DeepSeek V4 Flash', '1 llamada hoy'],
+      ['standby', 'Modo demo', 'Sin límite · respuestas con reglas'],
+    ]);
+    expect(panel.querySelector('.chain li.active .tag')?.textContent).toBe('En uso');
+    expect(panel.querySelector('.mine')?.textContent?.replace(/\s+/g, ' ')).toContain(
+      'quedan 4 esta hora y 12 hoy',
+    );
+    // El formato español separa el porcentaje con un espacio no separable.
+    const kpis = [...panel.querySelectorAll('.kpis dd')].map((d) =>
+      d.textContent?.replace(/\s/g, ' '),
+    );
+    expect(kpis).toEqual(['12', '75 %', '3.2', '15.000']);
+  });
+
+  it('desde el panel se puede probar el modo demo y volver, y se recuerda', async () => {
+    await render({ status: 'ok', provider: 'gemini', model: 'gemini-3.5-flash-lite' }, chainUsage);
+    await openPanel();
+
+    el.querySelector<HTMLButtonElement>('.switch')!.click();
     await fixture.whenStable();
 
     expect(saved).toEqual(['demo']);
-    expect(mode()).toBe('Modo demo · sin coste');
-    expect(el.querySelector('.mode.demo')).not.toBeNull();
+    expect(mode()).toBe('Modo demo');
+    expect(rows().map((r) => r[0])).toEqual(['standby', 'paused', 'standby', 'active']);
+    expect(el.querySelector('.switch')?.textContent?.trim()).toBe('Volver a la IA real');
   });
 
   it('avisa cuando se ha agotado el cupo de IA real', async () => {
@@ -129,29 +191,39 @@ describe('Topbar', () => {
       },
     );
 
-    expect(mode()).toBe('Modo demo · cupo de IA real agotado');
+    expect(mode()).toBe('Modo demo · cupo agotado');
+    expect(el.querySelector('.mode.demo')).not.toBeNull();
   });
 
-  it('sin modelo configurado no ofrece el selector de modo', async () => {
+  it('sin modelo configurado muestra el modo demo y no ofrece cambiar', async () => {
     await render(
       { status: 'ok', provider: 'demo', model: 'rumbo-demo' },
-      { provider: 'demo', model: 'rumbo-demo', realAi: false },
+      {
+        provider: 'demo',
+        model: 'rumbo-demo',
+        realAi: false,
+        providers: [{ name: 'demo', label: 'Modo demo', model: 'rumbo-demo', status: 'active' }],
+      },
     );
 
-    expect(el.querySelector('.mode-switch')).toBeNull();
-    expect(mode()).toBe('Modo demo · rumbo-demo');
+    expect(mode()).toBe('Modo demo');
+    await openPanel();
+    expect(rows()).toEqual([['active', 'Modo demo', 'Sin límite · respuestas con reglas']]);
+    expect(el.querySelector('.switch')).toBeNull();
   });
 
-  it('en el móvil solo ofrece el modo demo aunque haya IA real', async () => {
+  it('en el móvil responde el modo demo aunque haya IA real', async () => {
     await render(
-      { status: 'ok', provider: 'groq', model: 'openai/gpt-oss-120b' },
-      { provider: 'groq', model: 'openai/gpt-oss-120b', realAi: true, remaining: { hour: 4, day: 12 } },
+      { status: 'ok', provider: 'gemini', model: 'gemini-3.5-flash-lite' },
+      chainUsage,
       true,
     );
 
-    expect(el.querySelector('.mode-switch')).toBeNull();
-    expect(mode()).toBe('Modo demo · sin coste');
+    expect(mode()).toBe('Modo demo');
     expect(TestBed.inject(SystemStatusStore).effectiveMode()).toBe('demo');
+    const panel = await openPanel();
+    expect(panel.querySelector('.note')?.textContent).toContain('En el móvil');
+    expect(el.querySelector('.switch')).toBeNull();
   });
 
   it('el botón de información explica que el backend se duerme y se cierra al pulsar fuera', async () => {

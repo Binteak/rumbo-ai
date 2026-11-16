@@ -148,6 +148,21 @@ class UsageLimits:
             return True
         return provider is not None and self.store.get(f"cooldown:{provider}") > self._clock()
 
+    def cooldown_remaining(self, provider: str) -> int:
+        """Segundos que le quedan de pausa a un proveedor (0 si está disponible)."""
+        return max(0, int(self.store.get(f"cooldown:{provider}") - self._clock()))
+
+    # --- 4. Llamadas a cada modelo ------------------------------------------------------
+
+    def record_call(self, provider: str) -> None:
+        """Cuenta una llamada a un proveedor: para mostrar cuánto queda de su cuota gratuita."""
+        _, _, day = self._windows()
+        self.store.incr(f"calls:{provider}:{day}", 1, 90_000)
+
+    def calls_today(self, provider: str) -> int:
+        _, _, day = self._windows()
+        return self.store.get(f"calls:{provider}:{day}")
+
     def can_start_run(self) -> bool:
         return not self.cooling_down() and self.tokens_remaining() >= self.config.min_tokens_per_run
 

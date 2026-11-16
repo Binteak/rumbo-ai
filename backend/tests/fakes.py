@@ -69,7 +69,7 @@ class HTTPError(Exception):
 
 class FakeBudget:
     def __init__(self, ok: bool = True, cooling: tuple[str, ...] = ()) -> None:
-        self.ok, self.spent, self.cooldowns, self.paused = ok, 0, [], []
+        self.ok, self.spent, self.cooldowns, self.paused, self.calls = ok, 0, [], [], []
         self.cooling = set(cooling)
 
     def can_call(self) -> bool:
@@ -84,3 +84,6 @@ class FakeBudget:
 
     def cooling_down(self, provider: str | None = None) -> bool:
         return provider in self.cooling
+
+    def record_call(self, provider: str) -> None:
+        self.calls.append(provider)

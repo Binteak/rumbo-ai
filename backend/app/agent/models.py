@@ -29,6 +29,9 @@ class Provider:
     name: str  # "claude", "gemini", "groq", "demo"...: identifica sus cuotas y pausas
     model: str  # id del modelo, para mostrarlo en la interfaz
     llm: BaseChatModel  # el modelo de chat de LangChain
+    # Llamadas al día que permite su plan gratuito (None: sin límite conocido). Es orientativo:
+    # Rumbo cuenta sus propias llamadas, y el proveedor puede contar distinto (p. ej. por proyecto).
+    daily_requests: int | None = None
 
     @property
     def label(self) -> str:
@@ -58,21 +61,21 @@ def build_real_providers(settings: Settings) -> list[Provider]:
                 max_output_tokens=settings.llm_max_output_tokens,
                 temperature=0.3,
             )
-            providers.append(Provider("gemini", settings.gemini_model, llm))
+            providers.append(Provider("gemini", settings.gemini_model, llm, settings.gemini_daily_requests))
         elif name == "groq":
-            providers.append(
-                _openai_compatible("groq", settings.groq_model, settings.groq_base_url, settings.groq_api_key, settings)
-            )
+            groq = _openai_compatible("groq", settings.groq_model, settings.groq_base_url, settings.groq_api_key, settings)
+            groq.daily_requests = settings.groq_daily_requests
+            providers.append(groq)
         elif name == "extra":
-            providers.append(
-                _openai_compatible(
-                    settings.extra_llm_name,
-                    settings.extra_llm_model,
-                    settings.extra_llm_base_url,
-                    settings.extra_llm_api_key,
-                    settings,
-                )
+            extra = _openai_compatible(
+                settings.extra_llm_name,
+                settings.extra_llm_model,
+                settings.extra_llm_base_url,
+                settings.extra_llm_api_key,
+                settings,
             )
+            extra.daily_requests = settings.extra_llm_daily_requests
+            providers.append(extra)
     return providers
 
 

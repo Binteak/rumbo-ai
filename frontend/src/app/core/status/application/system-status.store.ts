@@ -5,7 +5,9 @@ import {
   Health,
   Usage,
   answersInDemo,
+  chainForDisplay,
   currentProvider,
+  prettyModelName,
   isRealAvailable,
   resolveMode,
   shortModelName,
@@ -38,8 +40,18 @@ export class SystemStatusStore {
     answersInDemo(this.effectiveMode(), this.usage(), this.health()),
   );
   readonly modelLabel = computed(() => shortModelName(this.usage(), this.health()));
+  /** Nombre de producto del modelo que responde: "Gemini 3.5 Flash-Lite". */
+  readonly modelName = computed(() =>
+    prettyModelName(this.usage()?.model ?? this.health()?.model ?? ''),
+  );
+  /** Toda la cadena de modelos con su estado y cuota, teniendo en cuenta el modo elegido. */
+  readonly chain = computed(() => chainForDisplay(this.usage(), this.effectiveMode()));
 
   init(): void {
+    // Enlace directo al modo demo (por ejemplo, para enseñar Rumbo sin conexión a los modelos): ?demo
+    if (typeof location !== 'undefined' && new URLSearchParams(location.search).has('demo')) {
+      this.setMode('demo');
+    }
     this.gateway.health().subscribe({
       next: (health) => this.health.set(health),
       error: () => this.health.set(null),
