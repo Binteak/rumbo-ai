@@ -23,6 +23,7 @@ from .db import AgentRun, SessionLocal, Trip, get_db, init_db
 from .limits import LimitsConfig, build_limits, client_ip
 from .rag import get_rag
 from .sessions import build_session_store
+from .tracing import check_in_background, destination
 
 settings = get_settings()
 log = logging.getLogger("rumbo")
@@ -32,6 +33,7 @@ DbSession = Annotated[Session, Depends(get_db)]
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    check_in_background()  # dice en los logs (y en /api/health) si las trazas llegan a LangSmith
     try:
         # Indexa las guías al arrancar (incremental: solo lo nuevo o modificado).
         get_rag()
@@ -133,7 +135,7 @@ class ChatRequest(BaseModel):
 @app.get("/api/health")
 def health() -> dict:
     """Liveness: el proceso responde."""
-    return {"status": "ok", "mode": provider.name, "model": provider.model}
+    return {"status": "ok", "mode": provider.name, "model": provider.model, "tracing": destination()}
 
 
 @app.get("/api/ready")

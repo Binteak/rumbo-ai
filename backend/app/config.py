@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Carga el .env también en las variables de entorno: LangChain lee de ahí LANGSMITH_TRACING,
-# LANGSMITH_API_KEY y LANGSMITH_PROJECT para enviar las trazas del agente a LangSmith.
+# LANGSMITH_API_KEY, LANGSMITH_AGENT_ID y LANGSMITH_AGENT_ENVIRONMENT para enviar las trazas a LangSmith.
 load_dotenv()
 
 
