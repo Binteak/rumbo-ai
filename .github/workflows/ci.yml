@@ -37,6 +37,8 @@ jobs:
       - run: pytest
       - name: Evals de recuperación del RAG (falla si recall@4 < 0.9)
         run: python -m evals.rag_eval --min-recall 0.9
+      - name: Evals del agente en modo demo (falla si alguna métrica baja de 1.0)
+        run: python -m evals.agent_eval --local --min-score 1.0
 
   frontend:
     runs-on: ubuntu-latest

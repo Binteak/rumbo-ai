@@ -160,6 +160,27 @@ No hay que definir también `LANGSMITH_PROJECT`: con las dos formas a la vez, La
 
 Cada turno aparece como "Rumbo · agente", con etiquetas del proveedor que respondió (`gemini`, `groq`...) para filtrar. En la traza se ve el prompt, cada llamada al modelo, las herramientas que eligió con sus argumentos y resultados, los tokens y la duración de cada paso. Al arrancar, el backend dice en sus logs y en `/api/health` (campo `tracing`) a dónde envía las trazas y si LangSmith acepta la clave.
 
+## Evals del agente
+
+Además de los evals del RAG, hay un dataset de 12 preguntas (`backend/evals/agent_questions.jsonl`): planes de viaje, ajustes, dudas prácticas, una pregunta sin datos, temas ajenos y un intento de inyección. Cada una dice qué debe pasar, y cinco evaluadores de código la puntúan con 1 o 0:
+
+| Evaluador | Qué comprueba |
+|---|---|
+| `herramientas` | Usa las herramientas que la pregunta necesita |
+| `alcance` | Ante temas ajenos o una inyección, no usa ninguna herramienta |
+| `contenido` | La respuesta cita la guía y no revela el prompt |
+| `argumentos` | Entiende la petición: destino, días, viajeros y estilo correctos |
+| `pasos` | Termina bien y en 8 pasos o menos |
+
+```bash
+cd backend
+python -m evals.agent_eval --local          # sin LangSmith: imprime las notas (lo usa la CI en modo demo)
+python -m evals.agent_eval                  # sube el dataset "rumbo-agente" y un experimento a LangSmith (modo demo)
+python -m evals.agent_eval --modo real      # con los modelos reales del .env (gasta cuota)
+```
+
+En LangSmith, **Datasets & Experiments → rumbo-agente** muestra cada experimento con la nota de cada evaluador por pregunta, y permite comparar dos experimentos lado a lado (por ejemplo, Gemini frente a Groq, o el prompt antiguo frente al nuevo).
+
 ## Guardarraíles
 
 | Riesgo | Cómo se controla |
