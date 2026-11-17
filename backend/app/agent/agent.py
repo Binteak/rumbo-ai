@@ -101,7 +101,13 @@ class Agent:
             # o los resultados de las herramientas ("tools"). Los avisos del middleware, como "custom".
             for mode, update in agent.stream(
                 {"messages": messages},
-                {"recursion_limit": self.max_iterations * 2 + 1},
+                {
+                    "recursion_limit": self.max_iterations * 2 + 1,
+                    # Cómo aparece cada turno en LangSmith: nombre, etiquetas para filtrar y metadatos.
+                    "run_name": "Rumbo · agente",
+                    "tags": ["rumbo", self.current.name],
+                    "metadata": {"modelo": self.current.model, "proveedor": self.current.name},
+                },
                 stream_mode=["updates", "custom"],
             ):
                 if mode == "custom":

@@ -49,3 +49,31 @@ def test_ready_checks_dependencies():
 def test_chat_validates_input():
     with TestClient(app) as client:
         assert client.post("/api/chat", json={"message": ""}).status_code == 422
+
+
+def test_tracing_destination_explains_the_langsmith_setup(monkeypatch):
+    from app.tracing import destination
+
+    for name in (
+        "LANGSMITH_TRACING",
+        "LANGSMITH_API_KEY",
+        "LANGSMITH_AGENT_ID",
+        "LANGSMITH_AGENT_ENVIRONMENT",
+        "LANGSMITH_PROJECT",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    assert destination()["enabled"] is False
+
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test")
+    monkeypatch.setenv("LANGSMITH_AGENT_ID", "rumbo")
+    monkeypatch.setenv("LANGSMITH_AGENT_ENVIRONMENT", "production")
+    info = destination()
+    assert info["agent"] == "rumbo/production" and info["problems"] == [] and "lsv2" not in str(info)
+
+    monkeypatch.setenv("LANGSMITH_PROJECT", "rumbo-ai")
+    assert "a la vez" in destination()["problems"][0]
+
+    monkeypatch.delenv("LANGSMITH_PROJECT")
+    monkeypatch.delenv("LANGSMITH_AGENT_ENVIRONMENT")
+    assert "faltan" in destination()["problems"][0]

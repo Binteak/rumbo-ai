@@ -147,15 +147,18 @@ Sin método de pago en el proveedor no hay factura posible. Además, la app se p
 
 ## Trazas con LangSmith
 
-LangChain envía cada ejecución del agente a [LangSmith](https://smith.langchain.com) sin tocar el código: basta con definir tres variables en `backend/.env` (nunca en `.env.example`, que sí se sube a git):
+LangChain envía cada ejecución del agente a [LangSmith](https://smith.langchain.com) sin tocar el código. En LangSmith se crea un agente (`rumbo`) con sus entornos, y en el backend basta con cuatro variables (en `backend/.env` en local y en el panel de Render en producción; nunca en `.env.example`, que sí se sube a git):
 
 ```
 LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=lsv2_...
-LANGSMITH_PROJECT=rumbo-ai
+LANGSMITH_AGENT_ID=rumbo
+LANGSMITH_AGENT_ENVIRONMENT=local      # production en Render
 ```
 
-En cada traza se ve el prompt, cada llamada al modelo, las herramientas que eligió con sus argumentos y resultados, los tokens y la duración de cada paso.
+No hay que definir también `LANGSMITH_PROJECT`: con las dos formas a la vez, LangSmith no guarda las trazas.
+
+Cada turno aparece como "Rumbo · agente", con etiquetas del proveedor que respondió (`gemini`, `groq`...) para filtrar. En la traza se ve el prompt, cada llamada al modelo, las herramientas que eligió con sus argumentos y resultados, los tokens y la duración de cada paso. Al arrancar, el backend dice en sus logs y en `/api/health` (campo `tracing`) a dónde envía las trazas y si LangSmith acepta la clave.
 
 ## Guardarraíles
 
