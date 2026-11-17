@@ -77,3 +77,18 @@ def test_tracing_destination_explains_the_langsmith_setup(monkeypatch):
     monkeypatch.delenv("LANGSMITH_PROJECT")
     monkeypatch.delenv("LANGSMITH_AGENT_ENVIRONMENT")
     assert "faltan" in destination()["problems"][0]
+
+
+def test_tracing_remembers_the_last_langsmith_error():
+    import logging
+
+    from app import tracing
+
+    handler = tracing._RememberLangSmithErrors(level=logging.WARNING)
+    logger = logging.getLogger("langsmith.client")
+    logger.addHandler(handler)
+    try:
+        logger.warning("Failed to multipart ingest runs: 403 Forbidden\nAPI Key: lsv2_**ab")
+    finally:
+        logger.removeHandler(handler)
+    assert tracing._last_error["message"] == "Failed to multipart ingest runs: 403 Forbidden"
