@@ -15,6 +15,15 @@ from importlib.metadata import PackageNotFoundError, version
 log = logging.getLogger("uvicorn.error")
 
 _check: dict[str, str] = {"status": "pendiente"}
+_last_error: dict[str, str | None] = {"message": None}
+
+
+class _RememberLangSmithErrors(logging.Handler):
+    """Guarda el último aviso de la librería de LangSmith (p. ej. si rechaza las trazas al enviarlas)."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        # La propia librería ya enmascara la clave ("lsv2_**ab"); se recorta por si acaso.
+        _last_error["message"] = record.getMessage().split("\n")[0][:300]
 
 
 def _env(name: str) -> str:
@@ -47,6 +56,7 @@ def destination() -> dict:
         info["project"] = "default"
     info["problems"] = problems
     info["check"] = _check["status"]
+    info["last_error"] = _last_error["message"]
     return info
 
 
@@ -56,6 +66,8 @@ def check_in_background() -> None:
     if not info["enabled"]:
         log.info("LangSmith: trazas desactivadas")
         return
+    handler = _RememberLangSmithErrors(level=logging.WARNING)
+    logging.getLogger("langsmith").addHandler(handler)
     where = info.get("agent") or info.get("project")
     log.info("LangSmith: trazas activadas → %s (langsmith %s)", where, info["sdk"])
     for problem in info["problems"]:
