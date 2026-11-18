@@ -1,26 +1,27 @@
-"""Carga de las guías y troceado (chunking).
+"""Carga de las guías y troceado (chunking) con los splitters de LangChain.
 
 Cada guía es un Markdown por destino (`data/guides/<destination_id>.md`). Se trocea
-por secciones `##` porque cada sección responde a un tema concreto (visado,
-transporte, propinas...): así un fragmento recuperado es una respuesta completa y
-la cita "Guía de Kioto · Cómo moverse" tiene sentido para el usuario.
+por secciones `##` (`MarkdownHeaderTextSplitter`) porque cada sección responde a un tema
+concreto (visado, transporte, propinas...): así un fragmento recuperado es una respuesta
+completa y la cita "Guía de Kioto · Cómo moverse" tiene sentido para el usuario.
 
-Si una sección es muy larga se divide por párrafos y frases, con solapamiento de
-una frase para no cortar una idea por la mitad.
+Si una sección es muy larga, `RecursiveCharacterTextSplitter` la divide por frases,
+con solapamiento para no cortar una idea por la mitad.
 """
 
 from __future__ import annotations
 
-import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
+
+from langchain_core.documents import Document
+from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 
 from .text import strip_accents
 
 GUIDES_DIR = Path(__file__).resolve().parent.parent / "data" / "guides"
 MAX_CHARS = 900
-_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
 
 @dataclass(frozen=True)
@@ -41,54 +42,42 @@ class Chunk:
         """
         return f"{self.destination} · {self.section}\n{self.text}"
 
-    @property
-    def content_hash(self) -> str:
-        return hashlib.sha256(self.embedding_text.encode("utf-8")).hexdigest()[:16]
+    def to_document(self) -> Document:
+        """El fragmento como `Document` de LangChain, que es lo que guarda el almacén de vectores."""
+        metadata = {k: getattr(self, k) for k in ("destination_id", "destination", "section", "source")}
+        return Document(page_content=self.embedding_text, metadata={"chunk_id": self.id, **metadata})
 
 
 def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", strip_accents(text)).strip("-")
 
 
-def _split_long(text: str, max_chars: int) -> list[str]:
-    """Divide un texto largo en trozos de como mucho `max_chars`, solapando una frase."""
-    if len(text) <= max_chars:
-        return [text]
-    sentences = [s for s in _SENTENCE_END.split(text) if s]
-    parts, current = [], []
-    for sentence in sentences:
-        if current and len(" ".join([*current, sentence])) > max_chars:
-            parts.append(" ".join(current))
-            current = [current[-1]]  # solapamiento: la última frase abre el siguiente trozo
-        current.append(sentence)
-    if current:
-        parts.append(" ".join(current))
-    return parts
+_by_heading = MarkdownHeaderTextSplitter(headers_to_split_on=[("#", "title"), ("##", "section")])
+
+
+def _splitter(max_chars: int) -> RecursiveCharacterTextSplitter:
+    # Corta por final de frase (y, si una frase no cabe, por espacios); el solapamiento
+    # repite el final de un trozo al principio del siguiente.
+    return RecursiveCharacterTextSplitter(
+        chunk_size=max_chars,
+        chunk_overlap=max_chars // 4,
+        separators=[r"(?<=[.!?])\s+", r"\s+"],
+        is_separator_regex=True,
+        keep_separator="end",
+    )
 
 
 def chunk_guide(markdown: str, destination_id: str, source: str, max_chars: int = MAX_CHARS) -> list[Chunk]:
-    title_match = re.search(r"^# (.+)$", markdown, flags=re.MULTILINE)
-    title = title_match.group(1).strip() if title_match else destination_id
-    destination = re.sub(r"^Guía práctica de\s+", "", title)
-
+    splitter = _splitter(max_chars)
     chunks: list[Chunk] = []
-    # Cada bloque empieza con "## Sección"; lo anterior a la primera sección es la introducción.
-    for block in re.split(r"^## ", markdown, flags=re.MULTILINE)[1:]:
-        heading, _, body = block.partition("\n")
-        section = heading.strip()
-        paragraphs = [" ".join(p.split()) for p in body.strip().split("\n\n") if p.strip()]
-        text = " ".join(paragraphs)
-        for n, part in enumerate(_split_long(text, max_chars)):
-            chunks.append(
-                Chunk(
-                    id=f"{destination_id}#{_slug(section)}#{n}",
-                    destination_id=destination_id,
-                    destination=destination,
-                    section=section,
-                    text=part,
-                    source=source,
-                )
-            )
+    for part in _by_heading.split_text(markdown):
+        section = part.metadata.get("section")
+        if not section:  # la introducción, antes de la primera sección
+            continue
+        destination = re.sub(r"^Guía práctica de\s+", "", part.metadata.get("title", destination_id))
+        text = " ".join(part.page_content.split())
+        for n, piece in enumerate(splitter.split_text(text)):
+            chunks.append(Chunk(f"{destination_id}#{_slug(section)}#{n}", destination_id, destination, section, piece, source))
     return chunks
 
 

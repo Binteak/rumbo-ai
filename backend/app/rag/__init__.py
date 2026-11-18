@@ -13,8 +13,13 @@ arranque igualmente.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
+
+from sqlalchemy import text as sql
+from sqlalchemy.engine import Engine
 
 from .chunking import Chunk, load_chunks
 from .embeddings import HashingEmbedder, build_embedder
@@ -48,15 +53,31 @@ def get_rag() -> Rag:
 
     settings = get_settings()
     chunks = load_chunks()
-    store = build_store(engine)
     embedder = build_embedder(settings.voyage_api_key, settings.embedding_model)
-    try:
-        stats = ingest(chunks, embedder, store)
-    except Exception as e:  # noqa: BLE001 - p. ej. clave de Voyage inválida o sin red
-        log.warning("Embedder %s no disponible (%s): se usa el embedder local", embedder.name, e)
-        embedder = HashingEmbedder()
-        stats = ingest(chunks, embedder, store)
+    with startup_lock(engine):
+        try:
+            store, records = build_store(engine, embedder)
+            stats = ingest(chunks, store, records)
+        except Exception as e:  # noqa: BLE001 - p. ej. clave de Voyage inválida o sin red
+            log.warning("Embedder %s no disponible (%s): se usa el embedder local", embedder.name, e)
+            embedder = HashingEmbedder()
+            store, records = build_store(engine, embedder)
+            stats = ingest(chunks, store, records)
     return Rag(Retriever(chunks, embedder, store, _destination_aliases()), stats)
+
+
+@contextmanager
+def startup_lock(engine: Engine) -> Iterator[None]:
+    """Con PostgreSQL, varias réplicas arrancando a la vez crean las tablas e indexan de una en una."""
+    if engine.dialect.name != "postgresql":
+        yield
+        return
+    with engine.connect() as conn:
+        conn.execute(sql("SELECT pg_advisory_lock(727275)"))
+        try:
+            yield
+        finally:
+            conn.execute(sql("SELECT pg_advisory_unlock(727275)"))
 
 
 def _destination_aliases() -> dict[str, str]:

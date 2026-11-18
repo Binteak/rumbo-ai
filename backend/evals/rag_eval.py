@@ -26,7 +26,7 @@ from app.rag.chunking import load_chunks
 from app.rag.embeddings import HashingEmbedder, VoyageEmbedder
 from app.rag.ingest import ingest
 from app.rag.retriever import Retriever
-from app.rag.store import MemoryVectorStore
+from app.rag.store import build_memory_store
 
 QUESTIONS = Path(__file__).with_name("rag_questions.jsonl")
 
@@ -57,8 +57,8 @@ def main() -> int:
 
     embedder = VoyageEmbedder(os.environ["VOYAGE_API_KEY"]) if args.embedder == "voyage" else HashingEmbedder()
     chunks = load_chunks()
-    store = MemoryVectorStore()
-    ingest(chunks, embedder, store)
+    store, records = build_memory_store(embedder)
+    ingest(chunks, store, records)
     from app.rag import _destination_aliases
 
     retriever = Retriever(chunks, embedder, store, _destination_aliases())

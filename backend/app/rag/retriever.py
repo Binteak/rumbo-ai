@@ -18,9 +18,11 @@ import time
 from collections import Counter
 from dataclasses import dataclass, field
 
+from langchain_core.embeddings import Embeddings
+from langchain_core.vectorstores import VectorStore
+
 from .chunking import Chunk
-from .embeddings import Embedder
-from .store import VectorStore
+from .store import vector_search
 from .text import expand_query, strip_accents, tokenize
 
 log = logging.getLogger("rumbo.rag")
@@ -97,7 +99,7 @@ class Retriever:
     def __init__(
         self,
         chunks: list[Chunk],
-        embedder: Embedder,
+        embedder: Embeddings,
         store: VectorStore,
         aliases: dict[str, str] | None = None,
         vector_weight: float | None = None,
@@ -105,7 +107,9 @@ class Retriever:
         self.chunks = {c.id: c for c in chunks}
         # Peso del ranking vectorial en la fusión. Con embeddings semánticos (Voyage) ambos rankings
         # pesan igual; el embedder local por hashing aporta menos señal, así que pesa menos.
-        self.vector_weight = vector_weight if vector_weight is not None else (0.3 if embedder.name.startswith("hashing") else 1.0)
+        self.vector_weight = (
+            vector_weight if vector_weight is not None else (0.3 if getattr(embedder, "name", "").startswith("hashing") else 1.0)
+        )
         self.embedder = embedder
         self.store = store
         self.bm25 = BM25(chunks)
@@ -130,7 +134,7 @@ class Retriever:
         t0 = time.perf_counter()
         try:
             qvec = self.embedder.embed_query(query)
-            semantic = self.store.search(self.embedder.name, qvec, CANDIDATES, destination_id)
+            semantic = vector_search(self.store, qvec, CANDIDATES, destination_id)
         except Exception as e:  # noqa: BLE001 - si los embeddings fallan, seguimos solo con BM25
             log.warning("Búsqueda vectorial no disponible (%s): se usa solo BM25", e)
             mode = "bm25"
