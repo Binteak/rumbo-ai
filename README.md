@@ -39,7 +39,7 @@ Agente de IA que **planifica viajes completos** (destino, clima, presupuesto e i
 - **Observabilidad.** Cada ejecución guarda pasos, llamadas a herramientas, errores, tokens y duración (`/api/stats`). La traza muestra cada paso en directo y la cabecera, la tasa de éxito, el consumo y el modo activo.
 - **Backend sin estado, listo para escalar.** El historial de cada conversación, su bloqueo y los contadores de uso viven en Redis, y los datos en PostgreSQL. Cualquier réplica puede atender el siguiente mensaje, así que el backend escala horizontalmente. Probado con 3 réplicas atendiendo la misma conversación.
 - **Preparado para Kubernetes.** Probes de liveness (`/api/health`) y readiness (`/api/ready`, que comprueba PostgreSQL y Redis), recursos limitados, usuario sin privilegios, autoescalado (HPA), Ingress con streaming y creación de tablas segura con varias réplicas arrancando a la vez (advisory lock de PostgreSQL).
-- **Calidad.** 83 tests de backend (pytest) y 6 de frontend (Vitest), evals del RAG, lint con Ruff, validación de manifiestos con kubeconform y CI en GitHub Actions. Los cambios entran por Pull Request con la CI en verde.
+- **Calidad.** 90 tests de backend (pytest) y 6 de frontend (Vitest), evals del RAG y del agente (también en LangSmith), lint con Ruff, validación de manifiestos con kubeconform y CI en GitHub Actions. Los cambios entran por Pull Request con la CI en verde.
 
 ## Arquitectura
 
@@ -235,6 +235,15 @@ flowchart LR
 | Sin destino (lo tiene que deducir) | 0,81 | 0,94 | 0,87 |
 
 La CI ejecuta los evals en cada push y **falla si recall@4 baja de 0,9**, así que un cambio en las guías o en el retriever que empeore la búsqueda no llega a `main`. Los parámetros de la fusión (k de RRF y peso del ranking vectorial) se eligieron con este conjunto; con 36 preguntas hay riesgo de sobreajuste, por eso las preguntas no repiten la redacción de las guías. Con `--embedder voyage` se evalúa con embeddings semánticos reales.
+
+Los mismos evals se pueden subir a LangSmith, igual que los del agente:
+
+```bash
+cd backend
+python -m evals.rag_eval --langsmith        # sube el dataset "rumbo-rag" y un experimento por escenario (filtered y open)
+```
+
+En **Datasets & Experiments → rumbo-rag** cada experimento muestra `hit@1`, `recall@k` y `mrr` por pregunta, con la posición en la que salió la sección correcta. Así se comparan versiones del retriever lado a lado (embedder local frente a Voyage, otro k de RRF...). La CI sigue ejecutándolos en local, sin depender de LangSmith.
 
 > Las guías son orientativas y están revisadas a noviembre de 2026. Los requisitos de entrada cambian: el agente recuerda verificarlos en las fuentes oficiales.
 
