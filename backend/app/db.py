@@ -11,6 +11,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sess
 from .config import get_settings
 
 
+# Base de los modelos ORM de SQLAlchemy.
 class Base(DeclarativeBase):
     pass
 
@@ -62,10 +63,12 @@ class AgentRun(Base):
 
 
 _settings = get_settings()
+# Conexión a la BD (DATABASE_URL). SQLite necesita check_same_thread=False porque FastAPI usa varios hilos.
 engine = create_engine(
     _settings.database_url,
     connect_args={"check_same_thread": False} if _settings.database_url.startswith("sqlite") else {},
 )
+# Fábrica de sesiones de SQLAlchemy.
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 
@@ -78,6 +81,7 @@ def init_db() -> None:
         Base.metadata.create_all(conn)
 
 
+# Dependencia de FastAPI: abre una sesión por petición y la cierra al terminar.
 def get_db() -> Iterator[Session]:
     with SessionLocal() as db:
         yield db

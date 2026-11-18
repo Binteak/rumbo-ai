@@ -13,11 +13,13 @@ import threading
 from typing import Protocol
 
 
+# Bloqueo de una conversación: acquire(blocking=False) devuelve False si ya hay una petición en curso.
 class SessionLock(Protocol):
     def acquire(self, blocking: bool = ...) -> bool: ...
     def release(self) -> None: ...
 
 
+# Lo que necesita main.py del almacén de sesiones; lo cumplen MemorySessionStore y RedisSessionStore.
 class SessionStore(Protocol):
     def get(self, session_id: str) -> list[dict]: ...
     def save(self, session_id: str, history: list[dict]) -> None: ...
@@ -26,6 +28,7 @@ class SessionStore(Protocol):
     def ping(self) -> bool: ...
 
 
+# Historial y bloqueos en memoria del proceso: vale para una sola instancia (local y tests).
 class MemorySessionStore:
     def __init__(self) -> None:
         self._data: dict[str, list[dict]] = {}
@@ -52,6 +55,7 @@ class MemorySessionStore:
         return True
 
 
+# Historial en Redis como JSON, con caducidad de 24 h; compartido entre réplicas.
 class RedisSessionStore:
     def __init__(self, url: str, ttl_seconds: int = 24 * 3600, client=None) -> None:
         import redis

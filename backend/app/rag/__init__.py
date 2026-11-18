@@ -32,6 +32,7 @@ log = logging.getLogger("rumbo.rag")
 __all__ = ["Chunk", "Rag", "Retriever", "SearchResult", "get_rag"]
 
 
+# El RAG listo para usar: el retriever y el resultado de la última ingesta.
 @dataclass
 class Rag:
     retriever: Retriever
@@ -46,6 +47,7 @@ class Rag:
         }
 
 
+# Se construye una vez por proceso (al arrancar la API) y se reutiliza en cada búsqueda.
 @lru_cache
 def get_rag() -> Rag:
     from ..config import get_settings
@@ -80,6 +82,7 @@ def startup_lock(engine: Engine) -> Iterator[None]:
             conn.execute(sql("SELECT pg_advisory_unlock(727275)"))
 
 
+# Nombres con los que el usuario puede referirse a cada destino ("Japón" → kioto), para detectarlo en la pregunta.
 def _destination_aliases() -> dict[str, str]:
     from ..agent.tools import destinations
 

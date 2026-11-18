@@ -22,11 +22,13 @@ from langchain_core.embeddings import Embeddings
 from .text import strip_accents, tokenize
 
 
+# Vector de longitud 1: así el producto escalar es directamente la similitud coseno.
 def _normalize(vec: list[float]) -> list[float]:
     norm = math.sqrt(sum(v * v for v in vec)) or 1.0
     return [v / norm for v in vec]
 
 
+# Embedder local: cada palabra y cada n-grama de 4 caracteres suma en una posición del vector elegida por hash.
 class HashingEmbedder(Embeddings):
     def __init__(self, dim: int = 512) -> None:
         self.dim = dim
@@ -56,6 +58,7 @@ class HashingEmbedder(Embeddings):
         return self._embed(text)
 
 
+# Embedder de Voyage AI por su API REST: input_type "document" al indexar y "query" al buscar.
 class VoyageEmbedder(Embeddings):
     """Cliente mínimo de la API de embeddings de Voyage AI (sin SDK: un POST con httpx)."""
 
@@ -90,5 +93,6 @@ class VoyageEmbedder(Embeddings):
         return self._embed([text], "query")[0]
 
 
+# Voyage si hay clave; si no, el embedder local.
 def build_embedder(voyage_api_key: str | None, model: str) -> HashingEmbedder | VoyageEmbedder:
     return VoyageEmbedder(voyage_api_key, model) if voyage_api_key else HashingEmbedder()

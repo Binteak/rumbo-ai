@@ -25,13 +25,17 @@ from .rag import get_rag
 from .sessions import build_session_store
 from .tracing import check_in_background, destination
 
+# Configuración leída de variables de entorno (.env en local, panel de Render o ConfigMap/Secret en Kubernetes).
 settings = get_settings()
 log = logging.getLogger("rumbo")
+# Sesión de SQLAlchemy inyectada en cada endpoint que la pide; se cierra al terminar la petición.
 DbSession = Annotated[Session, Depends(get_db)]
 
 
+# Arranque de la API: lo que va antes del `yield` se ejecuta una vez, antes de aceptar peticiones.
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    # Crea las tablas si no existen.
     init_db()
     check_in_background()  # dice en los logs (y en /api/health) si las trazas llegan a LangSmith
     try:
@@ -42,12 +46,14 @@ async def lifespan(_: FastAPI):
     yield
 
 
+# Aplicación FastAPI; la documentación OpenAPI queda en /docs.
 app = FastAPI(
     title="Rumbo AI",
     version="1.0.0",
     lifespan=lifespan,
     description="Agente de IA que planifica viajes, construido con LangChain.",
 )
+# CORS: solo los orígenes configurados (el frontend) pueden llamar a la API desde el navegador.
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_list, allow_methods=["*"], allow_headers=["*"])
 
 
@@ -94,6 +100,7 @@ def providers_for_run(ip: str) -> tuple[list[Provider], str | None]:
     return chain, None
 
 
+# Viaje de la BD → JSON para el frontend.
 def trip_to_dict(t: Trip) -> dict:
     return {
         "id": t.id,
@@ -113,6 +120,7 @@ def trip_to_dict(t: Trip) -> dict:
     }
 
 
+# Guarda un viaje en la BD. Se pasa a la herramienta save_trip a través del ToolContext.
 def _save_trip(data: dict) -> dict:
     with SessionLocal() as db:
         trip = Trip(**data)
@@ -121,10 +129,12 @@ def _save_trip(data: dict) -> dict:
         return trip_to_dict(trip)
 
 
+# Formato de un evento Server-Sent Events: "data: <json>" + línea en blanco.
 def _sse(event: dict) -> str:
     return f"data: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
 
 
+# Cuerpo de POST /api/chat, validado con Pydantic (mensaje de 1 a 1.000 caracteres).
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
     session_id: str | None = None
@@ -156,6 +166,7 @@ def ready() -> JSONResponse:
     return JSONResponse({"status": "ready" if ok else "not_ready", "checks": checks}, status_code=200 if ok else 503)
 
 
+# Catálogo de destinos (data/destinations.json).
 @app.get("/api/destinations")
 def list_destinations() -> list[dict]:
     return [{k: d[k] for k in ("id", "name", "country", "flag", "description", "tags")} for d in destinations().values()]
@@ -227,25 +238,35 @@ def provider_status(p: Provider, active: bool) -> dict:
     }
 
 
+# Endpoint principal: envía el mensaje al agente y devuelve cada paso en streaming (SSE).
 @app.post("/api/chat", response_model=None)
 def chat(req: ChatRequest, request: Request) -> StreamingResponse | JSONResponse:
+    # IP real del usuario (detrás de Cloudflare o de un proxy) para los límites de uso.
     ip = client_ip(request.headers, request.client.host if request.client else None)
+    # Anti-flood: demasiadas peticiones por minuto desde la misma IP → 429.
     if not limits.allow_request(ip):
         return JSONResponse(
             {"detail": "Demasiadas peticiones seguidas. Espera un minuto."}, status_code=429, headers={"Retry-After": "60"}
         )
+    # Sin session_id es una conversación nueva.
     session_id = req.session_id or str(uuid.uuid4())
+    # Bloqueo por sesión (en Redis si hay varias réplicas): una sola petición a la vez por conversación.
     lock = sessions.lock(session_id)
+    # Modelos que puede usar esta petición según cupos y presupuesto; lista vacía = modo demo.
     chain, notice = ([], None) if req.mode == "demo" else providers_for_run(ip)
     agent = Agent(chain, demo, limits, max_iterations=settings.agent_max_iterations)
 
+    # Generador que FastAPI va enviando al navegador según produce cada evento.
     def stream() -> Iterator[str]:
         if not lock.acquire(blocking=False):
             yield _sse({"type": "error", "message": "Ya hay una petición en curso en esta sesión."})
             return
+        # Historial de la conversación (mensajes de LangChain serializados).
         history = sessions.get(session_id)
         run_id = str(uuid.uuid4())
+        # Métricas del turno: pasos, herramientas, errores, tokens y duración.
         stats = RunStats()
+        # Dependencias de las herramientas en este turno (guardar viajes en la BD).
         ctx = ToolContext(save_trip=_save_trip)
         try:
             yield _sse(
@@ -259,10 +280,13 @@ def chat(req: ChatRequest, request: Request) -> StreamingResponse | JSONResponse
             )
             if notice:
                 yield _sse({"type": "notice", "text": notice})
+            # Cada paso del agente (pensando, llamada a herramienta, resultado, respuesta final) se reenvía tal cual.
             for event in agent.run(history, req.message, ctx, stats):
                 yield _sse(event)
+                # Al guardarse el viaje, se envía completo para pintarlo en el panel.
                 if event["type"] == "tool_result" and event["name"] == "save_trip" and not event["is_error"]:
                     yield _sse({"type": "trip", "trip": ctx.saved[-1]})
+            # El historial solo se guarda si el turno terminó bien.
             if stats.status == "completed":
                 sessions.save(session_id, history)
             yield _sse(
@@ -281,6 +305,7 @@ def chat(req: ChatRequest, request: Request) -> StreamingResponse | JSONResponse
             )
         finally:
             lock.release()
+            # Registro de la ejecución para /api/stats (observabilidad).
             with SessionLocal() as db:
                 db.add(
                     AgentRun(
@@ -301,17 +326,20 @@ def chat(req: ChatRequest, request: Request) -> StreamingResponse | JSONResponse
                 )
                 db.commit()
 
+    # X-Accel-Buffering: no → nginx no acumula la respuesta y los eventos llegan al momento.
     return StreamingResponse(
         stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
     )
 
 
+# Empieza una conversación nueva borrando el historial de la sesión.
 @app.post("/api/sessions/{session_id}/reset")
 def reset_session(session_id: str) -> dict:
     sessions.reset(session_id)
     return {"status": "reset"}
 
 
+# CRUD de viajes guardados.
 @app.get("/api/trips")
 def list_trips(db: DbSession) -> list[dict]:
     trips = db.scalars(select(Trip).order_by(Trip.created_at.desc()).limit(50))
@@ -335,6 +363,7 @@ def delete_trip(trip_id: int, db: DbSession) -> None:
     db.commit()
 
 
+# Métricas agregadas de todas las ejecuciones del agente: tasa de éxito, duración, herramientas, errores y tokens.
 @app.get("/api/stats")
 def stats(db: DbSession) -> dict:
     row = db.execute(

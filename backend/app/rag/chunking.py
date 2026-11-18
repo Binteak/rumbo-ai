@@ -20,10 +20,14 @@ from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharac
 
 from .text import strip_accents
 
+# Guías en Markdown, una por destino.
 GUIDES_DIR = Path(__file__).resolve().parent.parent / "data" / "guides"
+# Tamaño máximo de un fragmento; las secciones más largas se dividen.
 MAX_CHARS = 900
 
 
+# Fragmento de una guía: una sección (o un trozo de una sección larga) con su origen.
+# El id es "<destino>#<sección>#<n>", por ejemplo "kioto#como-moverse#0".
 @dataclass(frozen=True)
 class Chunk:
     id: str
@@ -48,10 +52,12 @@ class Chunk:
         return Document(page_content=self.embedding_text, metadata={"chunk_id": self.id, **metadata})
 
 
+# "Cómo moverse" → "como-moverse", para el id del fragmento.
 def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", strip_accents(text)).strip("-")
 
 
+# Divide el Markdown por títulos y deja el título (#) y la sección (##) en los metadatos.
 _by_heading = MarkdownHeaderTextSplitter(headers_to_split_on=[("#", "title"), ("##", "section")])
 
 
@@ -67,6 +73,7 @@ def _splitter(max_chars: int) -> RecursiveCharacterTextSplitter:
     )
 
 
+# Una guía → sus fragmentos.
 def chunk_guide(markdown: str, destination_id: str, source: str, max_chars: int = MAX_CHARS) -> list[Chunk]:
     splitter = _splitter(max_chars)
     chunks: list[Chunk] = []
@@ -75,12 +82,14 @@ def chunk_guide(markdown: str, destination_id: str, source: str, max_chars: int 
         if not section:  # la introducción, antes de la primera sección
             continue
         destination = re.sub(r"^Guía práctica de\s+", "", part.metadata.get("title", destination_id))
+        # Párrafos y saltos de línea en un solo texto con espacios simples.
         text = " ".join(part.page_content.split())
         for n, piece in enumerate(splitter.split_text(text)):
             chunks.append(Chunk(f"{destination_id}#{_slug(section)}#{n}", destination_id, destination, section, piece, source))
     return chunks
 
 
+# Todas las guías → todos los fragmentos (84 con las 10 guías actuales).
 def load_chunks(guides_dir: Path = GUIDES_DIR) -> list[Chunk]:
     chunks: list[Chunk] = []
     for path in sorted(guides_dir.glob("*.md")):

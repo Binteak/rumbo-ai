@@ -24,6 +24,7 @@ from sqlalchemy.engine import Engine
 log = logging.getLogger("rumbo.rag")
 
 
+# Nombre corto del almacén para /api/rag/status y los logs.
 def store_name(store: VectorStore) -> str:
     return "pgvector" if type(store).__name__ == "PGVector" else "memory"
 
@@ -36,7 +37,9 @@ def build_store(engine: Engine, embedder: Embeddings) -> tuple[VectorStore, Reco
             from langchain_classic.indexes import SQLRecordManager
             from langchain_postgres import PGVector
 
+            # Tablas de LangChain (langchain_pg_collection y langchain_pg_embedding); metadatos en JSONB para filtrar.
             store = PGVector(embedder, connection=engine, collection_name=f"rag:{name}", use_jsonb=True)
+            # Registro de lo ya indexado, en la misma base de datos.
             records = SQLRecordManager(f"rag:{name}", engine=engine)
             records.create_schema()
             return store, records
@@ -45,6 +48,7 @@ def build_store(engine: Engine, embedder: Embeddings) -> tuple[VectorStore, Reco
     return build_memory_store(embedder)
 
 
+# Almacén y registro en memoria: se reconstruyen en cada arranque (con 84 fragmentos tarda milisegundos).
 def build_memory_store(embedder: Embeddings) -> tuple[VectorStore, RecordManager]:
     records = InMemoryRecordManager(f"rag:{getattr(embedder, 'name', 'default')}")
     records.create_schema()

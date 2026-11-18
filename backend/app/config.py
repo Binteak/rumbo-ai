@@ -12,6 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 load_dotenv()
 
 
+# Cada campo se lee de la variable de entorno con el mismo nombre en mayúsculas (AGENT_MODEL, GEMINI_API_KEY...).
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -91,6 +92,7 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
 
+# Una sola instancia por proceso.
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
