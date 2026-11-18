@@ -1,8 +1,9 @@
-"""Ingesta: guías → fragmentos → embeddings → almacén de vectores.
+"""Ingesta: guías → fragmentos → embeddings → almacén de vectores, con la Indexing API de LangChain.
 
-Es incremental: solo se calculan embeddings de los fragmentos nuevos o modificados
-(se compara un hash del contenido), así que repetirla no cuesta nada si no hay cambios.
-Se ejecuta al arrancar la API y también a mano:
+`index()` es incremental: el record manager guarda un hash de cada fragmento indexado, así que solo
+se calculan embeddings de los nuevos o modificados, y con `cleanup="full"` se borran del almacén los
+que ya no están en las guías. Repetirla sin cambios no cuesta nada. Se ejecuta al arrancar la API
+y también a mano:
 
     python -m app.rag.ingest
 """
@@ -14,9 +15,11 @@ import logging
 import time
 from dataclasses import asdict, dataclass
 
+from langchain_core.indexing import RecordManager, index
+from langchain_core.vectorstores import VectorStore
+
 from .chunking import Chunk
-from .embeddings import Embedder
-from .store import VectorStore
+from .store import store_name
 
 log = logging.getLogger("rumbo.rag")
 
@@ -24,27 +27,22 @@ log = logging.getLogger("rumbo.rag")
 @dataclass
 class IngestStats:
     chunks: int
-    embedded: int
+    embedded: int  # fragmentos nuevos o modificados (los únicos que se envían al embedder)
     deleted: int
     embedder: str
     store: str
     duration_ms: int
 
 
-def ingest(chunks: list[Chunk], embedder: Embedder, store: VectorStore) -> IngestStats:
+def ingest(chunks: list[Chunk], store: VectorStore, records: RecordManager) -> IngestStats:
     started = time.perf_counter()
-    existing = store.existing_hashes(embedder.name)
-    pending = [c for c in chunks if existing.get(c.id) != c.content_hash]
-    if pending:
-        vectors = embedder.embed_documents([c.embedding_text for c in pending])
-        store.upsert(embedder.name, pending, vectors)
-    deleted = store.delete_missing(embedder.name, {c.id for c in chunks})
+    result = index([c.to_document() for c in chunks], records, store, cleanup="full", key_encoder="sha256")
     stats = IngestStats(
         chunks=len(chunks),
-        embedded=len(pending),
-        deleted=deleted,
-        embedder=embedder.name,
-        store=store.name,
+        embedded=result["num_added"] + result["num_updated"],
+        deleted=result["num_deleted"],
+        embedder=getattr(store.embeddings, "name", "default"),
+        store=store_name(store),
         duration_ms=int((time.perf_counter() - started) * 1000),
     )
     log.info("Ingesta RAG: %s", stats)

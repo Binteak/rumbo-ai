@@ -25,6 +25,7 @@ from .models import Provider
 log = logging.getLogger("rumbo.llm")
 
 
+# Lo que el middleware necesita de los límites de uso (lo implementa UsageLimits en limits.py).
 class Budget(Protocol):
     def can_call(self) -> bool: ...
     def spend(self, tokens: int) -> None: ...
@@ -52,6 +53,7 @@ class NoBudget:
         pass
 
 
+# Cadena de modelos: intercepta cada llamada al modelo y decide qué proveedor responde.
 class ModelChainMiddleware(AgentMiddleware):
     def __init__(self, providers: list[Provider], demo: Provider, budget: Budget) -> None:
         super().__init__()
@@ -61,30 +63,37 @@ class ModelChainMiddleware(AgentMiddleware):
         self.current = providers[0] if providers else demo  # el modelo que está respondiendo
 
     def wrap_model_call(self, request: ModelRequest, handler: Any) -> ModelResponse:
+        # Se prueban los modelos reales en orden hasta que uno responde; si no queda ninguno, responde el demo.
         while self.current is not self.demo:
             provider = self.current
+            # Presupuesto diario de tokens agotado → modo demo.
             if not self.budget.can_call():
                 self._switch("Se ha agotado el presupuesto diario de IA real: continúo en modo demo.")
                 break
+            # Proveedor en pausa (cuota agotada o caído hace poco).
             if self.budget.cooling_down(provider.name):
                 self.current = self._next_available(provider)  # en pausa por otra petición: se salta sin avisar
                 continue
             try:
+                # Misma petición (mensajes, herramientas) con el modelo de este proveedor.
                 response = handler(request.override(model=provider.llm))
-            except GraphBubbleUp:
+            except GraphBubbleUp:  # señales internas de LangGraph: no son errores del proveedor
                 raise
             except Exception as e:  # noqa: BLE001 - cualquier fallo del proveedor pasa al siguiente modelo
+                # Error del proveedor: se pausa el tiempo que toque y se pasa al siguiente.
                 seconds, reason = _pause_for(e)
                 log.warning("%s falla (%s): paso al siguiente modelo", provider.name, e)
                 self.budget.cooldown(seconds, provider.name)
                 self.current = self._next_available(provider)
                 self._notify(f"{provider.label} {reason}: continúo con {self._target()}.")
                 continue
+            # Respuesta correcta: se descuentan los tokens y se cuenta la llamada.
             self.budget.spend(_tokens_used(response))
             self.budget.record_call(provider.name)
             return response
         return handler(request.override(model=self.demo.llm))
 
+    # Siguiente proveedor de la cadena que no esté en pausa (o el demo).
     def _next_available(self, failed: Provider) -> Provider:
         rest = self.providers[self.providers.index(failed) + 1 :]
         return next((p for p in rest if not self.budget.cooling_down(p.name)), self.demo)
@@ -96,6 +105,7 @@ class ModelChainMiddleware(AgentMiddleware):
         self.current = self.demo
         self._notify(text)
 
+    # Aviso en la traza de la interfaz (llega como evento "custom" del stream de LangGraph).
     @staticmethod
     def _notify(text: str) -> None:
         get_stream_writer()({"type": "notice", "text": text})

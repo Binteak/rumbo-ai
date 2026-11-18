@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
+# Palabras vacías: no ayudan a distinguir un fragmento de otro y se descartan al tokenizar.
 STOPWORDS = frozenset(
     """
     a al algo algun alguna algunas alguno algunos ante antes aqui asi aun bien cada como con contra cual cuales
@@ -18,6 +19,7 @@ STOPWORDS = frozenset(
 _TOKEN = re.compile(r"[a-z0-9]+")
 
 
+# Minúsculas y sin tildes: "Japón" y "japon" cuentan como la misma palabra.
 def strip_accents(text: str) -> str:
     text = unicodedata.normalize("NFD", text.lower())
     return "".join(c for c in text if unicodedata.category(c) != "Mn")
@@ -34,6 +36,7 @@ def stem(token: str) -> str:
     return token
 
 
+# Texto → lista de términos normalizados (sin tildes, sin palabras vacías, con stemming).
 def tokenize(text: str) -> list[str]:
     # Las siglas en mayúsculas se conservan aunque coincidan con una palabra vacía ("ESTA", "ETA").
     acronyms = {strip_accents(a) for a in re.findall(r"\b[A-ZÁÉÍÓÚÑ]{3,}\b", text)}
@@ -158,6 +161,7 @@ QUERY_EXPANSIONS: dict[str, tuple[str, ...]] = {
         "fotografiar",
     ),
 }
+# Índice inverso: palabra del usuario (ya con stemming) → términos de la sección que se añaden.
 _TRIGGERS = {stem(t): expansion for expansion, triggers in QUERY_EXPANSIONS.items() for t in triggers}
 
 

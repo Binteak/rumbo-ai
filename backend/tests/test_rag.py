@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 
 import httpx
 import pytest
@@ -13,7 +14,7 @@ from app.rag.chunking import chunk_guide, load_chunks
 from app.rag.embeddings import HashingEmbedder, VoyageEmbedder
 from app.rag.ingest import ingest
 from app.rag.retriever import Retriever
-from app.rag.store import MemoryVectorStore
+from app.rag.store import build_memory_store
 from app.rag.text import expand_query, tokenize
 
 # --- Chunking -------------------------------------------------------------------
@@ -82,17 +83,17 @@ def test_voyage_embedder_sends_input_type_and_keeps_order():
 @pytest.fixture
 def retriever():
     chunks = load_chunks()
-    store = MemoryVectorStore()
-    ingest(chunks, HashingEmbedder(), store)
+    store, records = build_memory_store(HashingEmbedder())
+    ingest(chunks, store, records)
     return Retriever(chunks, HashingEmbedder(), store, {"japon": "kioto", "Lisboa": "lisboa"})
 
 
 def test_ingest_is_incremental():
     chunks = load_chunks()
-    store, emb = MemoryVectorStore(), HashingEmbedder()
-    assert ingest(chunks, emb, store).embedded == len(chunks)
-    assert ingest(chunks, emb, store).embedded == 0  # sin cambios, no se recalcula nada
-    stats = ingest(chunks[1:], emb, store)
+    store, records = build_memory_store(HashingEmbedder())
+    assert ingest(chunks, store, records).embedded == len(chunks)
+    assert ingest(chunks, store, records).embedded == 0  # sin cambios, no se recalcula nada
+    stats = ingest(chunks[1:], store, records)
     assert stats.embedded == 0 and stats.deleted == 1
 
 
@@ -194,18 +195,37 @@ def test_rag_singleton_is_reused():
 
 @pytest.mark.skipif(not os.getenv("TEST_PG_URL"), reason="TEST_PG_URL no definida")
 def test_pgvector_store_round_trip():
-    from sqlalchemy import create_engine, text
+    from langchain_classic.indexes import SQLRecordManager
+    from langchain_postgres import PGVector
+    from sqlalchemy import create_engine
 
-    from app.rag.store import PgVectorStore
+    from app.rag.store import vector_search
 
     engine = create_engine(os.environ["TEST_PG_URL"])
-    with engine.begin() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS rag_chunks"))
-    store = PgVectorStore(engine)
-    chunks, emb = load_chunks(), HashingEmbedder()
-    assert ingest(chunks, emb, store).embedded == len(chunks)
-    assert ingest(chunks, emb, store).embedded == 0
-    hits = store.search(emb.name, emb.embed_query("Kioto · Enchufes y conectividad enchufe tipo A"), 3, "kioto")
+    emb = HashingEmbedder()
+    store = PGVector(emb, connection=engine, collection_name="rag:test", pre_delete_collection=True)
+    records = SQLRecordManager(f"rag:test:{uuid.uuid4()}", engine=engine)
+    records.create_schema()
+    chunks = load_chunks()
+    stats = ingest(chunks, store, records)
+    assert stats.embedded == len(chunks) and stats.store == "pgvector"
+    assert ingest(chunks, store, records).embedded == 0
+    hits = vector_search(store, emb.embed_query("Kioto · Enchufes y conectividad enchufe tipo A"), 3, "kioto")
     assert hits[0][0] == "kioto#enchufes-y-conectividad#0" and -1 <= hits[0][1] <= 1
+    assert all(cid.startswith("kioto#") for cid, _ in hits)
     retriever = Retriever(chunks, emb, store)
     assert retriever.search("propinas", destination_id="lisboa").hits[0].chunk.section == "Dinero y propinas"
+
+
+@pytest.mark.skipif(not os.getenv("TEST_PG_URL"), reason="TEST_PG_URL no definida")
+def test_startup_lock_serializes_replicas():
+    from sqlalchemy import create_engine, text
+
+    from app.rag import startup_lock
+
+    engine = create_engine(os.environ["TEST_PG_URL"])
+    lock_held = text("SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND objid = 727275")
+    with engine.connect() as other:
+        with startup_lock(engine):
+            assert other.execute(lock_held).scalar() == 1
+        assert other.execute(lock_held).scalar() == 0

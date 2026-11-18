@@ -21,12 +21,14 @@ from dataclasses import dataclass
 from typing import Protocol
 
 
+# Contadores con caducidad: incr suma y fija el TTL la primera vez; get devuelve 0 si ha caducado.
 class CounterStore(Protocol):
     def incr(self, key: str, amount: int, ttl_s: int) -> int: ...
     def get(self, key: str) -> int: ...
     def set(self, key: str, value: int, ttl_s: int) -> None: ...
 
 
+# Contadores en memoria (una instancia). El reloj se inyecta para poder simular el tiempo en los tests.
 class MemoryCounterStore:
     def __init__(self, clock=time.time) -> None:
         self._data: dict[str, tuple[int, float]] = {}
@@ -60,6 +62,7 @@ class MemoryCounterStore:
             self._data[key] = (value, self._clock() + ttl_s)
 
 
+# Contadores en Redis: INCRBY + EXPIRE NX en un pipeline, compartidos entre réplicas.
 class RedisCounterStore:
     def __init__(self, client) -> None:
         self.redis = client
@@ -77,6 +80,7 @@ class RedisCounterStore:
         self.redis.set(f"rumbo:limits:{key}", value, ex=max(1, ttl_s))
 
 
+# Límites por defecto; en producción se cambian con variables de entorno (ver config.py).
 @dataclass(frozen=True)
 class LimitsConfig:
     flood_per_minute: int = 20
@@ -86,12 +90,14 @@ class LimitsConfig:
     min_tokens_per_run: int = 12_000
 
 
+# Las tres capas de protección y las pausas por proveedor, sobre un almacén de contadores con caducidad.
 class UsageLimits:
     def __init__(self, store: CounterStore, config: LimitsConfig, clock=time.time) -> None:
         self.store = store
         self.config = config
         self._clock = clock
 
+    # Claves de la ventana actual (minuto, hora y día en UTC): cada ventana tiene sus propios contadores.
     def _windows(self) -> tuple[str, str, str]:
         t = time.gmtime(self._clock())
         return time.strftime("%Y%m%d%H%M", t), time.strftime("%Y%m%d%H", t), time.strftime("%Y%m%d", t)
@@ -163,6 +169,7 @@ class UsageLimits:
         _, _, day = self._windows()
         return self.store.get(f"calls:{provider}:{day}")
 
+    # Para empezar un turno hace falta margen para un turno completo, no solo para una llamada.
     def can_start_run(self) -> bool:
         return not self.cooling_down() and self.tokens_remaining() >= self.config.min_tokens_per_run
 
@@ -177,6 +184,7 @@ class UsageLimits:
         }
 
 
+# Contadores en Redis si hay REDIS_URL (compartidos entre réplicas); si no, en memoria.
 def build_limits(redis_url: str | None, config: LimitsConfig) -> UsageLimits:
     if redis_url:
         import redis

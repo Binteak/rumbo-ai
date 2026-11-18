@@ -20,8 +20,10 @@ from typing import Any, Literal
 from langchain_core.tools import StructuredTool, ToolException
 from pydantic import BaseModel, Field, ValidationError
 
+# Catálogo de destinos: clima por mes, coste diario por estilo y actividades (pois).
 DATA_FILE = Path(__file__).resolve().parent.parent / "data" / "destinations.json"
 
+# Valores cerrados: el JSON Schema que ve el modelo los lista como opciones válidas.
 Style = Literal["mochilero", "confort", "lujo"]
 Interest = Literal[
     "gastronomia",
@@ -56,12 +58,14 @@ class ToolError(Exception):
     """Error que se devuelve al modelo para que corrija su siguiente paso."""
 
 
+# Se lee una sola vez por proceso.
 @lru_cache
 def destinations() -> dict[str, dict]:
     data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
     return {d["id"]: d for d in data}
 
 
+# Destino por id; si no existe, el error lista los ids válidos para que el modelo se corrija.
 def _get_destination(destination_id: str) -> dict:
     dest = destinations().get(destination_id)
     if dest is None:
@@ -71,6 +75,10 @@ def _get_destination(destination_id: str) -> dict:
 
 
 # --- Argumentos ---------------------------------------------------------------
+
+
+# Cada modelo Pydantic define los argumentos de una herramienta: tipos, rangos y descripciones.
+# De aquí sale el JSON Schema que recibe el LLM y la validación de lo que devuelve.
 
 
 class SearchDestinationsArgs(BaseModel):
@@ -117,6 +125,7 @@ class SaveTripArgs(BaseModel):
 # --- Implementaciones -----------------------------------------------------------
 
 
+# Puntúa cada destino por intereses (+2 cada uno), clima agradable en el mes (+1,5) y poca lluvia (+1).
 def search_destinations(args: SearchDestinationsArgs) -> dict:
     results = []
     for d in destinations().values():
@@ -152,6 +161,7 @@ def search_destinations(args: SearchDestinationsArgs) -> dict:
     return {"results": results[:4]}
 
 
+# Temperatura media y días de lluvia del mes, con un veredicto en texto.
 def get_climate(args: ClimateArgs) -> dict:
     d = _get_destination(args.destination_id)
     temp = d["climate"]["avg_temp_c"][args.month - 1]
@@ -167,6 +177,7 @@ def get_climate(args: ClimateArgs) -> dict:
     return {"destination": d["name"], "month": MONTHS[args.month - 1], "avg_temp_c": temp, "rain_days": rain, "verdict": verdict}
 
 
+# Coste diario del estilo × días, repartido en alojamiento, comida, transporte y actividades.
 def estimate_budget(args: BudgetArgs) -> dict:
     d = _get_destination(args.destination_id)
     per_day = d["daily_cost_eur"][args.style]
@@ -185,6 +196,7 @@ def estimate_budget(args: BudgetArgs) -> dict:
     }
 
 
+# Momento del día de una actividad (0 = amanecer, 2 = noche) para ordenarlas dentro de cada día.
 def _time_of_day(poi: dict) -> float:
     name = poi["name"].lower()
     if "amanecer" in name:
@@ -198,6 +210,7 @@ def _time_of_day(poi: dict) -> float:
     return 1
 
 
+# Reparte las actividades del destino entre los días: hasta 3 por día y unas 10 h como máximo.
 def build_itinerary(args: ItineraryArgs) -> dict:
     d = _get_destination(args.destination_id)
     # Primero lo que encaja con los intereses; las excursiones largas, al final.
@@ -271,6 +284,7 @@ def search_travel_guides(args: SearchGuidesArgs) -> dict:
 # --- Registro -----------------------------------------------------------------
 
 
+# Contexto de un turno: lo crea main.py en cada petición y lo comparten todas las herramientas.
 @dataclass
 class ToolContext:
     """Dependencias que algunas herramientas necesitan (p. ej. guardar en BD)."""
@@ -333,6 +347,7 @@ def save_trip(args: SaveTripArgs, ctx: ToolContext) -> dict:
     return {"trip_id": saved["id"], "status": "guardado"}
 
 
+# Definición de una herramienta: nombre y descripción (las ve el modelo), argumentos y función.
 @dataclass(frozen=True)
 class Tool:
     name: str
@@ -342,6 +357,7 @@ class Tool:
     needs_context: bool = False
 
 
+# Registro de herramientas del agente, por nombre.
 TOOLS: dict[str, Tool] = {
     t.name: t
     for t in [
@@ -402,6 +418,7 @@ def model_view(name: str, output: dict) -> dict:
     return output
 
 
+# Valida los argumentos con Pydantic y ejecuta la herramienta. La usan LangChain, el modo demo y el autoguardado.
 def execute_tool(name: str, raw_args: dict[str, Any], ctx: ToolContext | None = None) -> dict:
     tool = TOOLS.get(name)
     if tool is None:
@@ -412,6 +429,7 @@ def execute_tool(name: str, raw_args: dict[str, Any], ctx: ToolContext | None = 
         problems = "; ".join(f"{'.'.join(map(str, err['loc']))}: {err['msg']}" for err in e.errors())
         raise ToolError(f"Argumentos no válidos para {name}: {problems}") from None
     output = tool.handler(args, ctx or ToolContext()) if tool.needs_context else tool.handler(args)
+    # Se apunta la llamada con sus argumentos ya validados (lo usa pending_trip).
     if ctx is not None:
         ctx.calls.append((name, args.model_dump()))
     return output
@@ -425,6 +443,7 @@ def as_langchain_tools(ctx: ToolContext) -> list[StructuredTool]:
     return [_to_langchain(tool, ctx) for tool in TOOLS.values()]
 
 
+# Envuelve una herramienta de Rumbo en un StructuredTool de LangChain.
 def _to_langchain(tool: Tool, ctx: ToolContext) -> StructuredTool:
     def run(**args: Any) -> tuple[str, dict]:
         try:
@@ -436,6 +455,8 @@ def _to_langchain(tool: Tool, ctx: ToolContext) -> StructuredTool:
         # (contenido, artefacto): el modelo lee un resumen; la interfaz recibe el resultado completo.
         return json.dumps(model_view(tool.name, output), ensure_ascii=False), output
 
+    # args_schema: LangChain genera el JSON Schema desde el modelo Pydantic.
+    # content_and_artifact: el modelo recibe el contenido (resumen) y la interfaz el artefacto (completo).
     return StructuredTool.from_function(
         func=run,
         name=tool.name,

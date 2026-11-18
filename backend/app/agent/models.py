@@ -14,6 +14,7 @@ from langchain_core.language_models import BaseChatModel
 from ..config import Settings
 from .demo import DemoChatModel
 
+# Nombre legible de cada proveedor para la interfaz.
 LABELS = {
     "claude": "Claude",
     "gemini": "Gemini",
@@ -24,6 +25,7 @@ LABELS = {
 }
 
 
+# Un proveedor de la cadena: su modelo de chat de LangChain y los datos para cuotas y avisos.
 @dataclass
 class Provider:
     name: str  # "claude", "gemini", "groq", "demo"...: identifica sus cuotas y pausas
@@ -39,6 +41,7 @@ class Provider:
         return LABELS.get(self.name, self.name[:1].upper() + self.name[1:])
 
 
+# Modo demo: un modelo de chat falso que responde sin IA (sin coste).
 def demo_provider(delay_s: float = 0.0) -> Provider:
     return Provider("demo", "rumbo-demo", DemoChatModel(delay_s=delay_s))
 

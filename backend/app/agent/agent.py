@@ -26,6 +26,8 @@ from .middleware import Budget, ModelChainMiddleware, NoBudget
 from .models import Provider, demo_provider
 from .tools import ToolContext, as_langchain_tools, execute_tool, pending_trip
 
+# Prompt de sistema: alcance (solo viajes), orden de uso de las herramientas, cómo responder dudas
+# prácticas con las guías y formato de la respuesta final.
 SYSTEM_PROMPT = """Eres Rumbo, un agente que planifica viajes y resuelve dudas prácticas de viaje.
 Alcance: solo ayudas con viajes (planificar un viaje o resolver dudas prácticas para viajar). Si te
 preguntan cualquier otra cosa (deportes, fútbol, política, noticias, opiniones, programación, tareas,
@@ -49,9 +51,11 @@ Responde en el idioma del usuario. La interfaz ya muestra el itinerario, el pres
 un panel: en la respuesta final no repitas el itinerario día a día ni uses tablas ni Markdown; escribe
 de 2 a 4 frases en texto plano con lo esencial."""
 
+# Evento que se envía a la interfaz por SSE ({"type": "tool_call", ...}).
 Event = dict[str, Any]
 
 
+# Métricas de un turno del agente; al terminar se guardan en la tabla agent_runs.
 @dataclass
 class RunStats:
     iterations: int = 0
@@ -64,6 +68,7 @@ class RunStats:
     final_text: str = ""
 
 
+# Agente de Rumbo: `create_agent` de LangChain con la cadena de modelos como middleware.
 class Agent:
     def __init__(
         self,
@@ -84,13 +89,16 @@ class Agent:
     def run(self, history: list[dict], user_input: str, ctx: ToolContext, stats: RunStats) -> Iterator[Event]:
         """Ejecuta un turno. `history` se modifica en sitio solo si el turno termina bien."""
         started = time.perf_counter()
+        # El agente se crea en cada turno: herramientas ligadas al contexto de este turno y la cadena de modelos.
         agent = create_agent(
             model=self.current.llm,
             tools=as_langchain_tools(ctx),
             system_prompt=SYSTEM_PROMPT,
             middleware=[self.chain],
         )
+        # Historial de la conversación + mensaje nuevo del usuario.
         messages = [*load_history(history), HumanMessage(user_input)]
+        # Mensajes que genera este turno (respuestas del modelo y resultados de herramientas).
         new_messages: list[BaseMessage] = []
         final = ""
         tools_started = time.perf_counter()
@@ -102,6 +110,7 @@ class Agent:
             for mode, update in agent.stream(
                 {"messages": messages},
                 {
+                    # Cada paso son dos nodos del grafo de LangGraph (modelo y herramientas), +1 para la respuesta final.
                     "recursion_limit": self.max_iterations * 2 + 1,
                     # Cómo aparece cada turno en LangSmith: nombre, etiquetas para filtrar y metadatos.
                     "run_name": "Rumbo · agente",
@@ -136,8 +145,10 @@ class Agent:
                 yield from self._auto_save(args, ctx, stats)
             stats.status = "completed"
             stats.final_text = final
+            # El historial se actualiza solo si el turno termina bien.
             history[:] = messages_to_dict([*messages, *new_messages])
             yield {"type": "final", "text": final}
+        # Límite de pasos superado (bucle).
         except GraphRecursionError:
             stats.status = "max_iterations"
             stats.final_text = f"He alcanzado el límite de {self.max_iterations} pasos sin terminar."
@@ -175,6 +186,7 @@ class Agent:
             "duration_ms": round((time.perf_counter() - started) * 1000, 1),
         }
 
+    # Guarda el viaje desde el servidor cuando el modelo generó el itinerario pero no llamó a save_trip.
     @staticmethod
     def _auto_save(args: dict, ctx: ToolContext, stats: RunStats) -> Iterator[Event]:
         stats.tool_calls += 1

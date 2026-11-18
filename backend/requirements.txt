@@ -8,6 +8,10 @@ langchain>=1.5
 langchain-anthropic>=1.7
 langchain-openai>=1.8
 langchain-google-genai>=4.5
+# RAG con piezas de LangChain: splitters, PGVector (pgvector) y record manager de la Indexing API
+langchain-text-splitters>=1.1
+langchain-postgres>=0.0.19
+langchain-classic>=1.0
 # Trazas en LangSmith; desde la 0.14 admite LANGSMITH_AGENT_ID y LANGSMITH_AGENT_ENVIRONMENT
 langsmith>=0.14.9
 python-dotenv>=1.0

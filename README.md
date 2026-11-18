@@ -22,7 +22,7 @@ Agente de IA que **planifica viajes completos** (destino, clima, presupuesto e i
 | Frontend | Angular 22 (signals, componentes standalone), TypeScript, SCSS con tokens de diseño (variables CSS), ilustraciones SVG propias por destino, streaming con `fetch` + `ReadableStream` |
 | Backend | Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2.0, Server-Sent Events |
 | IA | LangChain 1.x (`create_agent`, middleware, `StructuredTool`), LangSmith para trazas; Claude (Anthropic) y una cadena de modelos gratuitos (Gemini → Groq → DeepSeek vía OpenRouter); modo demo sin modelo |
-| RAG | Chunking por secciones, BM25 + embeddings (Voyage AI o local) fusionados con RRF, pgvector, evals de recuperación |
+| RAG | Piezas de LangChain (`MarkdownHeaderTextSplitter`, `PGVector`, `InMemoryVectorStore`, Indexing API) + búsqueda híbrida propia: BM25 + embeddings (Voyage AI o local) fusionados con RRF, evals de recuperación |
 | Datos | PostgreSQL + pgvector (SQLite en local), Redis para sesiones, bloqueos y límites de uso |
 | Infra | Docker multi-stage, Docker Compose, Kubernetes (kustomize, HPA, Ingress, probes), nginx, Render |
 | Calidad | pytest, Vitest, Ruff, kubeconform, GitHub Actions (tests, evals, build de imágenes) |
@@ -30,7 +30,7 @@ Agente de IA que **planifica viajes completos** (destino, clima, presupuesto e i
 ## Qué demuestra este proyecto
 
 - **Agente con LangChain.** `create_agent` hace el bucle (modelo → herramientas → resultados → modelo) en `backend/app/agent/agent.py`, que solo define el prompt, las herramientas y el middleware, y traduce cada paso a un evento para la interfaz. Se mantiene el control de cada paso: límite de iteraciones, errores que vuelven al modelo para que se corrija y un historial que solo se guarda si el turno termina bien. Con LangSmith activado, cada conversación queda trazada (herramientas, argumentos, tokens y tiempos).
-- **RAG híbrido hecho a mano.** Búsqueda BM25 + embeddings fusionada con Reciprocal Rank Fusion, vectores en PostgreSQL/pgvector, citas de la fuente en cada respuesta y evals de recuperación que bloquean la CI si la calidad baja. Detalles en [RAG](#rag-guías-prácticas-de-cada-destino).
+- **RAG híbrido sobre piezas de LangChain.** Lo estándar es de LangChain (troceado, almacenes de vectores e ingesta incremental) y la búsqueda híbrida es propia: BM25 + embeddings fusionados con Reciprocal Rank Fusion, vectores en PostgreSQL/pgvector, citas de la fuente en cada respuesta y evals de recuperación que bloquean la CI si la calidad baja. Detalles en [RAG](#rag-guías-prácticas-de-cada-destino).
 - **Modelo intercambiable.** Cada proveedor es un modelo de chat de LangChain: `ChatAnthropic` (Claude), `ChatGoogleGenerativeAI` (Gemini), `ChatOpenAI` para cualquier API compatible con OpenAI (Groq, DeepSeek vía OpenRouter...) y `DemoChatModel`, un **modo demo** sin API key. Un middleware propio (`ModelChainMiddleware`) los encadena: si uno agota su cuota o no responde, el turno sigue con el siguiente sin que el usuario note nada más que un aviso. El historial se guarda como mensajes de LangChain, así que se puede cambiar de proveedor a mitad de una conversación.
 - **IA real gratis y sin sorpresas.** Anti-flood por IP, cupo de IA real por persona y presupuesto diario de tokens por debajo de la cuota gratuita, con paso automático al modo demo. Detalles en [Modelo gratuito y protección](#modelo-gratuito-y-protección-frente-a-abusos).
 - **Guardarraíles: el servidor no confía en el modelo para lo importante.** El viaje se recalcula en el servidor en lugar de usar datos largos generados por el modelo; si el modelo genera el itinerario pero olvida guardarlo, lo guarda el servidor; el agente rechaza los temas ajenos a los viajes. Detalles en [Guardarraíles](#guardarraíles).
@@ -39,7 +39,7 @@ Agente de IA que **planifica viajes completos** (destino, clima, presupuesto e i
 - **Observabilidad.** Cada ejecución guarda pasos, llamadas a herramientas, errores, tokens y duración (`/api/stats`). La traza muestra cada paso en directo y la cabecera, la tasa de éxito, el consumo y el modo activo.
 - **Backend sin estado, listo para escalar.** El historial de cada conversación, su bloqueo y los contadores de uso viven en Redis, y los datos en PostgreSQL. Cualquier réplica puede atender el siguiente mensaje, así que el backend escala horizontalmente. Probado con 3 réplicas atendiendo la misma conversación.
 - **Preparado para Kubernetes.** Probes de liveness (`/api/health`) y readiness (`/api/ready`, que comprueba PostgreSQL y Redis), recursos limitados, usuario sin privilegios, autoescalado (HPA), Ingress con streaming y creación de tablas segura con varias réplicas arrancando a la vez (advisory lock de PostgreSQL).
-- **Calidad.** 78 tests de backend (pytest) y 6 de frontend (Vitest), evals del RAG, lint con Ruff, validación de manifiestos con kubeconform y CI en GitHub Actions. Los cambios entran por Pull Request con la CI en verde.
+- **Calidad.** 83 tests de backend (pytest) y 6 de frontend (Vitest), evals del RAG, lint con Ruff, validación de manifiestos con kubeconform y CI en GitHub Actions. Los cambios entran por Pull Request con la CI en verde.
 
 ## Arquitectura
 
@@ -217,11 +217,11 @@ flowchart LR
 | Pieza | Decisión y motivo |
 |---|---|
 | Base de conocimiento | `backend/app/data/guides/*.md`: una guía por destino (10 guías, 84 fragmentos). |
-| Chunking | Por sección `##`: cada fragmento responde a un tema completo y la cita "Guía de Kioto · Cómo moverse" tiene sentido. Las secciones largas se dividen con solapamiento de una frase. Cada vector incluye destino y sección como contexto. |
-| Embeddings | Interfaz `Embedder` con dos implementaciones: **Voyage AI** (`voyage-4-lite`, multilingüe, el proveedor que recomienda Anthropic) si hay `VOYAGE_API_KEY`, y un **embedder local por hashing** sin coste ni red para la demo, los tests y la CI. |
-| Almacén | Interfaz `VectorStore`: **PostgreSQL + pgvector** (similitud coseno con `<=>`) cuando la BD es PostgreSQL, y memoria con SQLite. Cada fila guarda qué embedder la generó, así que cambiar de embedder reindexa sin mezclar vectores. |
+| Chunking | `MarkdownHeaderTextSplitter` de LangChain parte cada guía por sección `##`: cada fragmento responde a un tema completo y la cita "Guía de Kioto · Cómo moverse" tiene sentido. Las secciones largas se dividen por frases con `RecursiveCharacterTextSplitter`, con solapamiento. Cada fragmento es un `Document` de LangChain y su vector incluye destino y sección como contexto. |
+| Embeddings | Interfaz `Embeddings` de LangChain con dos implementaciones: **Voyage AI** (`voyage-4-lite`, multilingüe, el proveedor que recomienda Anthropic) si hay `VOYAGE_API_KEY`, y un **embedder local por hashing** sin coste ni red para la demo, los tests y la CI. |
+| Almacén | Almacenes de vectores de LangChain: **`PGVector`** (PostgreSQL + pgvector, similitud coseno en la BD) cuando la BD es PostgreSQL, e **`InMemoryVectorStore`** con SQLite. Cada embedder tiene su colección, así que cambiar de embedder reindexa sin mezclar vectores. |
 | Búsqueda | **Híbrida**: BM25 acierta con términos exactos ("ESTA", "OMNY") y los vectores con sinónimos; se combinan con **Reciprocal Rank Fusion** porque sus puntuaciones no son comparables. Si la pregunta nombra un destino, se filtra por él. |
-| Ingesta | Incremental por hash de contenido: solo se recalculan los fragmentos nuevos o modificados. Se ejecuta al arrancar (con bloqueo de PostgreSQL para varias réplicas) o con `python -m app.rag.ingest`. |
+| Ingesta | **Indexing API** de LangChain (`index()` con un *record manager*: `SQLRecordManager` en PostgreSQL, en memoria con SQLite): guarda un hash de cada fragmento, solo calcula embeddings de los nuevos o modificados y borra los que ya no están en las guías. Se ejecuta al arrancar (con bloqueo de PostgreSQL para que varias réplicas no indexen a la vez) o con `python -m app.rag.ingest`. |
 | Fiabilidad | Si el servicio de embeddings falla, la búsqueda sigue solo con BM25 y lo indica (`retrieval: "bm25"`). Si Voyage falla al arrancar, se usa el embedder local. Si no hay resultados, la herramienta pide al modelo que lo diga en vez de inventar. |
 | Observabilidad | La traza muestra cada fragmento recuperado con su fuente, su posición en BM25 y en la búsqueda vectorial y el tiempo de cada parte. |
 
@@ -348,7 +348,7 @@ Ningún test llama a un modelo real: se usan modelos de chat falsos de LangChain
 - **Agente:** autocorrección tras un error de herramienta o argumentos inválidos, resultados compactos para el modelo y completos para la interfaz, límite de iteraciones, guardado del viaje por el servidor y rechazo de temas ajenos.
 - **Cadena de modelos:** 429 con `retry-after`, 402 como cuota agotada, 5xx como caída, paso al siguiente proveedor, pausas por proveedor, presupuesto agotado y modo demo al final; los proveedores se crean como modelos de chat de LangChain.
 - **Protección:** anti-flood, cupos por IP con reloj simulado (memoria y Redis), presupuesto de tokens, *cooldown* y paso al modo demo de punta a punta.
-- **RAG:** chunking, ingesta incremental, búsqueda híbrida, degradación a BM25, cliente de Voyage y, en la CI, el almacén pgvector contra un PostgreSQL real.
+- **RAG:** chunking, ingesta incremental, búsqueda híbrida, degradación a BM25, cliente de Voyage y, en la CI, `PGVector` y el bloqueo de arranque contra un PostgreSQL real.
 - **Sesiones:** dos réplicas comparten la conversación a través de Redis.
 
 ## Estructura
@@ -364,7 +364,7 @@ backend/
   app/main.py              API FastAPI + SSE
   app/db.py                SQLAlchemy 2.0 (viajes y trazas)
   app/sessions.py          Sesiones en memoria o Redis (con bloqueo distribuido)
-  app/rag/                 RAG: chunking, embeddings, pgvector, búsqueda híbrida, ingesta
+  app/rag/                 RAG: chunking y almacenes (LangChain), embeddings, búsqueda híbrida, ingesta
   app/data/guides/         Base de conocimiento: una guía práctica por destino
   evals/                   Evals de recuperación del RAG (preguntas + script)
   tests/                   pytest
@@ -401,6 +401,7 @@ Las páginas son contenedores que conectan los stores con componentes presentaci
 | 1.4 | Cadena de proveedores gratuitos (Gemini → Groq → Hugging Face u otro compatible con OpenAI) con pausa por proveedor: al agotarse uno, sigue el siguiente antes de pasar al modo demo |
 | 1.5 | Nueva identidad visual de app de viajes: tema claro marino + ámbar con acentos naranja y un azul suave, colores centralizados en variables CSS, cabecera del viaje con una ilustración minimalista de cada ciudad (escritorio y móvil) y logo de catalejo |
 | 1.6 | Agente migrado a LangChain 1.x (`create_agent` + middleware) con trazas en LangSmith: el bucle y la traducción entre proveedores escritos a mano se sustituyen por LangChain, sin cambios en la interfaz |
+| 1.7 | RAG sobre piezas de LangChain: splitters, `PGVector`/`InMemoryVectorStore` e Indexing API en lugar del troceado, el SQL de pgvector y la ingesta escritos a mano; la búsqueda híbrida (BM25 + RRF) sigue siendo propia. Mismos resultados en los evals |
 
 ## Limitaciones conocidas
 

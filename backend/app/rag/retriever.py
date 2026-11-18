@@ -18,18 +18,23 @@ import time
 from collections import Counter
 from dataclasses import dataclass, field
 
+from langchain_core.embeddings import Embeddings
+from langchain_core.vectorstores import VectorStore
+
 from .chunking import Chunk
-from .embeddings import Embedder
-from .store import VectorStore
+from .store import vector_search
 from .text import expand_query, strip_accents, tokenize
 
 log = logging.getLogger("rumbo.rag")
 # Constante de RRF. El valor clásico es 60 (pensado para listas de cientos de candidatos); con 20
 # candidatos, k=10 hace que la primera posición pese más. Elegido con `evals/rag_eval.py`.
 RRF_K = 10
+# Candidatos que se piden a cada búsqueda (BM25 y vectorial) antes de fusionar.
 CANDIDATES = 20
 
 
+# BM25 (Okapi) sobre los fragmentos: puntúa por frecuencia del término en el fragmento (tf), rareza en el
+# conjunto (idf) y longitud del fragmento. k1 controla la saturación del tf y b la penalización por longitud.
 class BM25:
     def __init__(self, chunks: list[Chunk], k1: float = 1.5, b: float = 0.75) -> None:
         self.chunks = chunks
@@ -60,6 +65,7 @@ class BM25:
         return sorted(scored, key=lambda s: -s[1])[:k]
 
 
+# Un fragmento recuperado, con su puntuación RRF y su posición en cada ranking (se muestra en la traza).
 @dataclass
 class Hit:
     chunk: Chunk
@@ -84,6 +90,7 @@ class Hit:
         }
 
 
+# Resultado de una búsqueda: fragmentos, modo usado y tiempos de cada parte.
 @dataclass
 class SearchResult:
     hits: list[Hit]
@@ -93,11 +100,12 @@ class SearchResult:
     timings_ms: dict[str, float] = field(default_factory=dict)
 
 
+# Búsqueda híbrida: BM25 + vectores del almacén de LangChain, fusionados con RRF.
 class Retriever:
     def __init__(
         self,
         chunks: list[Chunk],
-        embedder: Embedder,
+        embedder: Embeddings,
         store: VectorStore,
         aliases: dict[str, str] | None = None,
         vector_weight: float | None = None,
@@ -105,7 +113,9 @@ class Retriever:
         self.chunks = {c.id: c for c in chunks}
         # Peso del ranking vectorial en la fusión. Con embeddings semánticos (Voyage) ambos rankings
         # pesan igual; el embedder local por hashing aporta menos señal, así que pesa menos.
-        self.vector_weight = vector_weight if vector_weight is not None else (0.3 if embedder.name.startswith("hashing") else 1.0)
+        self.vector_weight = (
+            vector_weight if vector_weight is not None else (0.3 if getattr(embedder, "name", "").startswith("hashing") else 1.0)
+        )
         self.embedder = embedder
         self.store = store
         self.bm25 = BM25(chunks)
@@ -120,22 +130,26 @@ class Retriever:
 
     def search(self, query: str, k: int = 4, destination_id: str | None = None) -> SearchResult:
         timings: dict[str, float] = {}
+        # Filtro por destino: el que indica el agente o el que se detecta en la pregunta.
         destination_id = destination_id or self.detect_destination(query)
         t0 = time.perf_counter()
+        # 1. Búsqueda por palabras (BM25), con la consulta ampliada con vocabulario de las guías.
         expanded, added = expand_query(query)
         lexical = self.bm25.search(expanded, CANDIDATES, destination_id)
         timings["bm25"] = round((time.perf_counter() - t0) * 1000, 1)
 
+        # 2. Búsqueda vectorial: embedding de la pregunta y similitud coseno en el almacén.
         mode, semantic = "hybrid", []
         t0 = time.perf_counter()
         try:
             qvec = self.embedder.embed_query(query)
-            semantic = self.store.search(self.embedder.name, qvec, CANDIDATES, destination_id)
+            semantic = vector_search(self.store, qvec, CANDIDATES, destination_id)
         except Exception as e:  # noqa: BLE001 - si los embeddings fallan, seguimos solo con BM25
             log.warning("Búsqueda vectorial no disponible (%s): se usa solo BM25", e)
             mode = "bm25"
         timings["vector"] = round((time.perf_counter() - t0) * 1000, 1)
 
+        # Fusión RRF: cada fragmento suma peso / (RRF_K + posición) por cada ranking en el que aparece.
         hits: dict[str, Hit] = {}
         for rank, (cid, _) in enumerate(lexical, start=1):
             hit = hits.setdefault(cid, Hit(self.chunks[cid], 0.0))
@@ -151,5 +165,6 @@ class Retriever:
         # suficiente: así una pregunta fuera de las guías devuelve "sin resultados" en lugar de ruido.
         if not lexical:
             hits = {cid: h for cid, h in hits.items() if (h.vector_score or 0) >= 0.35}
+        # 3. Los k mejores tras la fusión.
         ranked = sorted(hits.values(), key=lambda h: -h.score)[:k]
         return SearchResult(ranked, mode, destination_id, added, timings)

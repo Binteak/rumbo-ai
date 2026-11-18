@@ -1,6 +1,7 @@
 """Embedders: convierten texto en vectores.
 
-Igual que el agente puede usar cualquier modelo de chat, el RAG habla con un `Embedder`:
+Los dos implementan la interfaz `Embeddings` de LangChain, así que cualquier almacén de
+vectores de LangChain (`InMemoryVectorStore`, `PGVector`...) los usa sin adaptadores:
 
 - `VoyageEmbedder`: embeddings semánticos multilingües de Voyage AI (el proveedor
   que recomienda Anthropic, ya que Claude no genera embeddings). Se usa en
@@ -14,27 +15,21 @@ from __future__ import annotations
 
 import hashlib
 import math
-from typing import Protocol
 
 import httpx
+from langchain_core.embeddings import Embeddings
 
 from .text import strip_accents, tokenize
 
 
-class Embedder(Protocol):
-    name: str
-    dim: int
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]: ...
-    def embed_query(self, text: str) -> list[float]: ...
-
-
+# Vector de longitud 1: así el producto escalar es directamente la similitud coseno.
 def _normalize(vec: list[float]) -> list[float]:
     norm = math.sqrt(sum(v * v for v in vec)) or 1.0
     return [v / norm for v in vec]
 
 
-class HashingEmbedder:
+# Embedder local: cada palabra y cada n-grama de 4 caracteres suma en una posición del vector elegida por hash.
+class HashingEmbedder(Embeddings):
     def __init__(self, dim: int = 512) -> None:
         self.dim = dim
         self.name = f"hashing-{dim}"
@@ -63,7 +58,8 @@ class HashingEmbedder:
         return self._embed(text)
 
 
-class VoyageEmbedder:
+# Embedder de Voyage AI por su API REST: input_type "document" al indexar y "query" al buscar.
+class VoyageEmbedder(Embeddings):
     """Cliente mínimo de la API de embeddings de Voyage AI (sin SDK: un POST con httpx)."""
 
     BATCH = 128
@@ -97,5 +93,6 @@ class VoyageEmbedder:
         return self._embed([text], "query")[0]
 
 
-def build_embedder(voyage_api_key: str | None, model: str) -> Embedder:
+# Voyage si hay clave; si no, el embedder local.
+def build_embedder(voyage_api_key: str | None, model: str) -> HashingEmbedder | VoyageEmbedder:
     return VoyageEmbedder(voyage_api_key, model) if voyage_api_key else HashingEmbedder()
